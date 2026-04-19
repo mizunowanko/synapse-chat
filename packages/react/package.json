@@ -1,0 +1,73 @@
+{
+  "name": "@synapse-chat/react",
+  "version": "0.0.0",
+  "description": "React chat UI primitives (ChatMessage, ToolUseGroup, SessionInput) + WebSocket client + useChat hook for synapse-chat.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mizunowanko/synapse-chat.git",
+    "directory": "packages/react"
+  },
+  "homepage": "https://github.com/mizunowanko/synapse-chat/tree/main/packages/react#readme",
+  "bugs": {
+    "url": "https://github.com/mizunowanko/synapse-chat/issues"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx",
+    "!src/test-setup.ts"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "typecheck": "tsc -b",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "synapse-chat",
+    "react",
+    "chat-ui",
+    "websocket",
+    "stream-json"
+  ],
+  "dependencies": {
+    "@synapse-chat/core": "*",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "mdast-util-find-and-replace": "^3.0.2",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^2.6.0",
+    "unified": "^11.0.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/mdast": "^4.0.4",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "jsdom": "^25.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

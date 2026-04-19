@@ -1,0 +1,45 @@
+{
+  "name": "@synapse-chat/core",
+  "version": "0.0.0",
+  "description": "Shared types and interfaces for synapse-chat: StreamMessage, ImageAttachment, CLIAdapter, SessionOptions.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mizunowanko/synapse-chat.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/mizunowanko/synapse-chat/tree/main/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/mizunowanko/synapse-chat/issues"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "synapse-chat",
+    "types",
+    "cli-adapter",
+    "stream-json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

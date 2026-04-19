@@ -1,0 +1,35 @@
+{
+  "name": "@synapse-chat/example",
+  "version": "0.0.0",
+  "private": true,
+  "description": "End-to-end runnable demo for synapse-chat: Vite + React + ws + claude CLI.",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:client": "vite",
+    "dev:server": "tsx watch server/index.ts",
+    "typecheck": "tsc -b",
+    "build": "tsc -b && vite build"
+  },
+  "dependencies": {
+    "@synapse-chat/core": "*",
+    "@synapse-chat/react": "*",
+    "@synapse-chat/server": "*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/ws": "^8.5.13",
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.0.0",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.0"
+  }
+}

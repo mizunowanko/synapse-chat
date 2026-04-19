@@ -1,0 +1,29 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "synapse-chat",
+  "entryPointStrategy": "packages",
+  "entryPoints": [
+    "packages/core",
+    "packages/server",
+    "packages/react"
+  ],
+  "out": "docs/api",
+  "readme": "README.md",
+  "navigationLinks": {
+    "GitHub": "https://github.com/mizunowanko/vibe-admiral",
+    "ADR-0026": "https://github.com/mizunowanko/vibe-admiral/blob/main/adr/0026-ai-chat-web-ui-framework.md"
+  },
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/test-setup.ts",
+    "**/dist/**",
+    "**/node_modules/**"
+  ],
+  "excludeExternals": true,
+  "excludePrivate": true,
+  "excludeProtected": false,
+  "excludeInternal": true,
+  "skipErrorChecking": true,
+  "githubPages": false
+}

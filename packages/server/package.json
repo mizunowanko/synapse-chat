@@ -1,0 +1,56 @@
+{
+  "name": "@synapse-chat/server",
+  "version": "0.0.0",
+  "description": "Node.js CLI process manager + stream parser + supervisor for synapse-chat.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mizunowanko/synapse-chat.git",
+    "directory": "packages/server"
+  },
+  "homepage": "https://github.com/mizunowanko/synapse-chat/tree/main/packages/server#readme",
+  "bugs": {
+    "url": "https://github.com/mizunowanko/synapse-chat/issues"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./supervisor": {
+      "types": "./dist/supervisor/index.d.ts",
+      "default": "./dist/supervisor/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "typecheck": "tsc -b",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "synapse-chat",
+    "process-manager",
+    "stream-json",
+    "supervisor",
+    "cli-subprocess"
+  ],
+  "dependencies": {
+    "@synapse-chat/core": "*"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
