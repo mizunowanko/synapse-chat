@@ -45,7 +45,7 @@
     "cli-subprocess"
   ],
   "dependencies": {
-    "@synapse-chat/core": "*"
+    "@synapse-chat/core": "file:../core"
   },
   "engines": {
     "node": ">=20"

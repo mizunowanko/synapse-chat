@@ -43,7 +43,7 @@
     "stream-json"
   ],
   "dependencies": {
-    "@synapse-chat/core": "*",
+    "@synapse-chat/core": "file:../core",
     "clsx": "^2.1.1",
     "lucide-react": "^0.468.0",
     "mdast-util-find-and-replace": "^3.0.2",
@@ -65,7 +65,9 @@
     "@vitejs/plugin-react": "^4.3.0",
     "jsdom": "^25.0.1",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "remark-parse": "^11.0.0",
+    "remark-stringify": "^11.0.0"
   },
   "publishConfig": {
     "access": "public"

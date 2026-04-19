@@ -12,9 +12,9 @@
     "build": "tsc -b && vite build"
   },
   "dependencies": {
-    "@synapse-chat/core": "*",
-    "@synapse-chat/react": "*",
-    "@synapse-chat/server": "*",
+    "@synapse-chat/core": "file:../../packages/core",
+    "@synapse-chat/react": "file:../../packages/react",
+    "@synapse-chat/server": "file:../../packages/server",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "ws": "^8.18.0"
