@@ -61,16 +61,17 @@ Each layer is independently consumable:
 | [`@synapse-chat/core`](./packages/core) | Shared types (`StreamMessage`, `ImageAttachment`, `CLIAdapter`, `SessionOptions`, `ProcessManagerLike`). Dependency-free; safe to import from any environment. |
 | [`@synapse-chat/server`](./packages/server) | Node.js `ProcessManager`, `stream-json` parser, generic `Supervisor`, and Claude / Gemini adapters. |
 | [`@synapse-chat/react`](./packages/react) | React 18/19 chat primitives (`ChatMessage`, `ToolUseGroup`, `SessionInput`), `useChat` / `useWebSocket` hooks, and a generic `WSClient`. |
+| [`@synapse-chat/mcp`](./packages/mcp) | MCP (Model Context Protocol) helpers: declarative HTTP-to-MCP tool proxies, stdio server scaffold, and Claude Code / Gemini CLI settings generators. Optional — pull in only when exposing a Backend to CLI agents. |
 
 Dependency graph:
 
 ```
 @synapse-chat/react   ──┐
-                        ├──▶  @synapse-chat/core
+@synapse-chat/mcp     ──┤──▶  @synapse-chat/core
 @synapse-chat/server  ──┘
 ```
 
-`server` and `react` never depend on each other; pick whichever subset you need.
+`server`, `react`, and `mcp` never depend on each other; pick whichever subset you need.
 
 ## Quickstart
 
@@ -144,6 +145,7 @@ export function App() {
 | Document | Topic |
 | --- | --- |
 | [docs/cli-adapter-guide.md](./docs/cli-adapter-guide.md) | Implementing a `CLIAdapter` for a new CLI (annotated `claudeAdapter` walkthrough + worked example for a hypothetical `myllm` CLI). |
+| [docs/mcp-helper-guide.md](./docs/mcp-helper-guide.md) | Exposing a Backend HTTP API to CLI agents via `@synapse-chat/mcp`: `defineHttpTool`, `createMcpServer`, settings-file generators, confirmation guard. |
 | [docs/ws-protocol.md](./docs/ws-protocol.md) | The WebSocket message protocol used by the example app. Recommended baseline for new apps; not enforced by the framework itself. |
 | [apps/example/README.md](./apps/example/README.md) | How to run the example, where to plug in your own backend, and how to add custom WS message handlers. |
 | TypeDoc API reference | Run `pnpm docs:api` from the repo root to generate HTML at `docs/api/`. The output is gitignored. |
@@ -155,7 +157,8 @@ synapse-chat/
 ├── packages/
 │   ├── core/        # @synapse-chat/core — types
 │   ├── server/      # @synapse-chat/server — ProcessManager, adapters, supervisor
-│   └── react/       # @synapse-chat/react — UI primitives + WSClient
+│   ├── react/       # @synapse-chat/react — UI primitives + WSClient
+│   └── mcp/         # @synapse-chat/mcp — MCP tool proxies + CLI settings generators
 ├── apps/
 │   └── example/     # End-to-end runnable demo (Vite + ws + claude CLI)
 ├── docs/

@@ -5,7 +5,8 @@
   "entryPoints": [
     "packages/core",
     "packages/server",
-    "packages/react"
+    "packages/react",
+    "packages/mcp"
   ],
   "out": "docs/api",
   "readme": "README.md",
