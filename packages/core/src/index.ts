@@ -9,3 +9,4 @@ export type {
   ProcessEvents,
   SendResult,
 } from "./process-manager-like.js";
+export type { ChatStorage } from "./storage.js";
