@@ -40,4 +40,16 @@ export interface CLIAdapter {
 
   /** Patterns that indicate a transient error worth retrying. */
   retryableErrorPatterns: RegExp[];
+
+  /**
+   * Optional hook invoked by the spawner before the CLI starts, to write
+   * CLI-specific config into the working directory (for example, MCP
+   * server entries into `.mcp.json` or `.gemini/settings.json`).
+   *
+   * The hook is advisory — `ProcessManager` does not call it today. It
+   * exists so that custom spawners and adapter wrappers (`withMcp(...)`,
+   * etc.) can surface a uniform pre-spawn step. Implementations should be
+   * idempotent so that repeated invocations on the same worktree are safe.
+   */
+  prepareWorkspace?(cwd: string): Promise<void>;
 }

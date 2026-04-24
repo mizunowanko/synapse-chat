@@ -1,0 +1,58 @@
+{
+  "name": "@synapse-chat/mcp",
+  "version": "0.0.0",
+  "description": "MCP (Model Context Protocol) helpers for synapse-chat: declarative HTTP → MCP tool proxies, stdio server scaffold, and Claude Code / Gemini CLI settings generators.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mizunowanko/synapse-chat.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/mizunowanko/synapse-chat/tree/main/packages/mcp#readme",
+  "bugs": {
+    "url": "https://github.com/mizunowanko/synapse-chat/issues"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./generators": {
+      "types": "./dist/generators/index.d.ts",
+      "default": "./dist/generators/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "typecheck": "tsc -b",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "synapse-chat",
+    "mcp",
+    "model-context-protocol",
+    "stdio",
+    "http-proxy",
+    "cli-tool"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@synapse-chat/core": "file:../core"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
