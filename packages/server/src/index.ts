@@ -3,11 +3,13 @@ export {
   COMMANDER_ALLOWED_TOOLS,
   isRetryableError,
   isRateLimitError,
+  type DispatchOptions,
 } from "./process-manager.js";
 export {
   attachStdoutProcessor,
   attachStderrProcessor,
   type StreamCallbacks,
+  type StreamLineParser,
 } from "./stream-processor.js";
 export {
   parseStreamMessage,

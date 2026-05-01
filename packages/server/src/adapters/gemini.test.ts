@@ -25,6 +25,22 @@ describe("buildGeminiArgs", () => {
     });
     expect(args).toEqual(["--prompt", "hi"]);
   });
+
+  it("appends --yolo when autoApprove is true", () => {
+    expect(buildGeminiArgs({ autoApprove: true })).toEqual(["--yolo"]);
+    expect(buildGeminiArgs({ prompt: "hi", autoApprove: true })).toEqual([
+      "--prompt",
+      "hi",
+      "--yolo",
+    ]);
+  });
+
+  it("omits --yolo when autoApprove is false or unset", () => {
+    expect(buildGeminiArgs({ prompt: "hi" })).not.toContain("--yolo");
+    expect(buildGeminiArgs({ prompt: "hi", autoApprove: false })).not.toContain(
+      "--yolo",
+    );
+  });
 });
 
 describe("parseGeminiOutput", () => {

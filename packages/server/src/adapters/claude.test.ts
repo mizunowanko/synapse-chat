@@ -65,6 +65,18 @@ describe("buildClaudeArgs", () => {
     expect(args[idx + 1]).toBe("You are helpful.");
   });
 
+  it("appends --dangerously-skip-permissions when autoApprove is true", () => {
+    const args = buildClaudeArgs({ autoApprove: true });
+    expect(args).toContain("--dangerously-skip-permissions");
+  });
+
+  it("omits --dangerously-skip-permissions when autoApprove is false or unset", () => {
+    expect(buildClaudeArgs({})).not.toContain("--dangerously-skip-permissions");
+    expect(buildClaudeArgs({ autoApprove: false })).not.toContain(
+      "--dangerously-skip-permissions",
+    );
+  });
+
   it("combines every option in a single invocation", () => {
     const args = buildClaudeArgs({
       prompt: "run",

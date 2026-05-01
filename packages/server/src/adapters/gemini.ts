@@ -21,6 +21,9 @@ export function buildGeminiArgs(options: SessionOptions): string[] {
   if (options.prompt) {
     args.push("--prompt", options.prompt);
   }
+  if (options.autoApprove) {
+    args.push("--yolo");
+  }
   return args;
 }
 

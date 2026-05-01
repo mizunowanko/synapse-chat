@@ -43,6 +43,9 @@ export function buildClaudeArgs(options: SessionOptions): string[] {
   if (options.systemPrompt) {
     args.push("--append-system-prompt", options.systemPrompt);
   }
+  if (options.autoApprove) {
+    args.push("--dangerously-skip-permissions");
+  }
 
   return args;
 }
