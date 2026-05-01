@@ -140,6 +140,67 @@ describe("parseGeminiOutput", () => {
       content: line,
     });
   });
+
+  it("emits a result message with normalized usage (Gemini-style camelCase)", () => {
+    const line = JSON.stringify({
+      type: "result",
+      result: "ok",
+      usageMetadata: {
+        promptTokenCount: 1200,
+        candidatesTokenCount: 300,
+        cachedContentTokenCount: 80,
+      },
+    });
+    expect(parseGeminiOutput(line)).toEqual({
+      type: "result",
+      content: "ok",
+      usage: {
+        inputTokens: 1200,
+        outputTokens: 300,
+        cacheRead: 80,
+      },
+    });
+  });
+
+  it("emits a result message with normalized usage (Claude-style snake_case)", () => {
+    const line = JSON.stringify({
+      type: "result",
+      result: "done",
+      usage: {
+        input_tokens: 10,
+        output_tokens: 5,
+        cache_read_input_tokens: 2,
+        cache_creation_input_tokens: 1,
+      },
+    });
+    expect(parseGeminiOutput(line)).toEqual({
+      type: "result",
+      content: "done",
+      usage: {
+        inputTokens: 10,
+        outputTokens: 5,
+        cacheRead: 2,
+        cacheWrite: 1,
+      },
+    });
+  });
+
+  it("emits a result with no usage when usage block is missing", () => {
+    const line = JSON.stringify({ type: "result", result: "no usage" });
+    expect(parseGeminiOutput(line)).toEqual({
+      type: "result",
+      content: "no usage",
+    });
+  });
+
+  it("ignores result-typed payload with empty result string", () => {
+    const line = JSON.stringify({ type: "result", result: "" });
+    // Falls through to text/content fallback → raw line as assistant
+    expect(parseGeminiOutput(line)).toEqual({
+      type: "assistant",
+      content: line,
+    });
+  });
 });
 
 describe("formatGeminiInput", () => {

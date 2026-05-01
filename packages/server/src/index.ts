@@ -15,6 +15,7 @@ export {
   parseStreamMessage,
   extractSessionId,
   extractResultUsage,
+  toTokenUsage,
   type ResultUsage,
 } from "./stream-parser.js";
 export { safeJsonParse, type ParseJsonSafeOptions } from "./util/json-safe.js";
@@ -40,6 +41,7 @@ export type {
   StreamMessage,
   StreamMessageType,
   ImageAttachment,
+  TokenUsage,
 } from "@synapse-chat/core";
 
 // CLI adapters (Claude, Gemini). Re-exported via the "./adapters" subpath too.

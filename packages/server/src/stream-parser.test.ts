@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { parseStreamMessage } from "./stream-parser.js";
+import {
+  extractResultUsage,
+  parseStreamMessage,
+  toTokenUsage,
+} from "./stream-parser.js";
 
 describe("parseStreamMessage", () => {
   // === tool_result ===
@@ -514,6 +518,61 @@ describe("parseStreamMessage", () => {
       });
       expect(result).toBeNull();
     });
+
+    it("attaches normalized usage from Claude-style result", () => {
+      const result = parseStreamMessage({
+        type: "result",
+        result: "all done",
+        total_cost_usd: 0.0123,
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 250,
+          cache_read_input_tokens: 100,
+          cache_creation_input_tokens: 50,
+        },
+      });
+      expect(result).toEqual({
+        type: "result",
+        content: "all done",
+        usage: {
+          inputTokens: 1000,
+          outputTokens: 250,
+          cacheRead: 100,
+          cacheWrite: 50,
+        },
+        timestamp: expect.any(Number),
+      });
+    });
+
+    it("omits cache fields when adapter reports zero", () => {
+      const result = parseStreamMessage({
+        type: "result",
+        result: "all done",
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+        },
+      });
+      expect(result).toEqual({
+        type: "result",
+        content: "all done",
+        usage: { inputTokens: 10, outputTokens: 5 },
+        timestamp: expect.any(Number),
+      });
+    });
+
+    it("does not attach usage when result has neither cost nor usage block", () => {
+      const result = parseStreamMessage({
+        type: "result",
+        result: "all done",
+      });
+      expect(result).toEqual({
+        type: "result",
+        content: "all done",
+        timestamp: expect.any(Number),
+      });
+      expect(result).not.toHaveProperty("usage");
+    });
   });
 
   // === default (unknown types) ===
@@ -554,5 +613,78 @@ describe("parseStreamMessage", () => {
       const result = parseStreamMessage({ type: "unknown_type" });
       expect(result).toBeNull();
     });
+  });
+});
+
+describe("extractResultUsage", () => {
+  it("returns null for non-result types", () => {
+    expect(extractResultUsage({ type: "assistant" })).toBeNull();
+  });
+
+  it("returns null when result has neither cost nor usage", () => {
+    expect(extractResultUsage({ type: "result", result: "x" })).toBeNull();
+  });
+
+  it("preserves the legacy ResultUsage shape", () => {
+    const usage = extractResultUsage({
+      type: "result",
+      total_cost_usd: 0.5,
+      usage: {
+        input_tokens: 1,
+        output_tokens: 2,
+        cache_read_input_tokens: 3,
+        cache_creation_input_tokens: 4,
+      },
+    });
+    expect(usage).toEqual({
+      inputTokens: 1,
+      outputTokens: 2,
+      cacheReadInputTokens: 3,
+      cacheCreationInputTokens: 4,
+      costUsd: 0.5,
+    });
+  });
+
+  it("defaults missing fields to zero when only cost is present", () => {
+    expect(
+      extractResultUsage({ type: "result", total_cost_usd: 0.01 }),
+    ).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      costUsd: 0.01,
+    });
+  });
+});
+
+describe("toTokenUsage", () => {
+  it("strips cost and renames cache fields", () => {
+    expect(
+      toTokenUsage({
+        inputTokens: 10,
+        outputTokens: 5,
+        cacheReadInputTokens: 7,
+        cacheCreationInputTokens: 3,
+        costUsd: 0.42,
+      }),
+    ).toEqual({
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheRead: 7,
+      cacheWrite: 3,
+    });
+  });
+
+  it("omits cache fields when zero", () => {
+    expect(
+      toTokenUsage({
+        inputTokens: 10,
+        outputTokens: 5,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        costUsd: 0,
+      }),
+    ).toEqual({ inputTokens: 10, outputTokens: 5 });
   });
 });

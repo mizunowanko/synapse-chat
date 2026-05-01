@@ -14,6 +14,10 @@ export {
   useWebSocket,
   type UseWebSocketResult,
 } from "./hooks/useWebSocket.js";
+export {
+  useTokenUsage,
+  type CumulativeTokenUsage,
+} from "./hooks/useTokenUsage.js";
 
 export {
   WSClient,
@@ -41,4 +45,5 @@ export type {
   StreamMessage,
   StreamMessageType,
   ImageAttachment,
+  TokenUsage,
 } from "@synapse-chat/core";

@@ -1,4 +1,4 @@
-import type { StreamMessage } from "@synapse-chat/core";
+import type { StreamMessage, TokenUsage } from "@synapse-chat/core";
 
 /**
  * Token usage and cost extracted from a Claude CLI session `result` message.
@@ -71,6 +71,25 @@ export function extractResultUsage(
 }
 
 /**
+ * Project a {@link ResultUsage} onto the normalized {@link TokenUsage} shape
+ * carried by {@link StreamMessage}. Cache fields are omitted when zero so the
+ * payload stays minimal for adapters that don't report them.
+ */
+export function toTokenUsage(usage: ResultUsage): TokenUsage {
+  const result: TokenUsage = {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+  };
+  if (usage.cacheReadInputTokens > 0) {
+    result.cacheRead = usage.cacheReadInputTokens;
+  }
+  if (usage.cacheCreationInputTokens > 0) {
+    result.cacheWrite = usage.cacheCreationInputTokens;
+  }
+  return result;
+}
+
+/**
  * Transform raw Claude CLI stream-json output into a StreamMessage
  * that downstream consumers can display.
  *
@@ -129,10 +148,15 @@ function parseStreamMessageInner(
     case "result": {
       const result = raw.result as string | undefined;
       if (!result) return null;
-      return {
+      const message: StreamMessage = {
         type: "result",
         content: result,
       };
+      const usage = extractResultUsage(raw);
+      if (usage) {
+        message.usage = toTokenUsage(usage);
+      }
+      return message;
     }
 
     case "system": {
