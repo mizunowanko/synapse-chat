@@ -29,12 +29,23 @@ export interface StreamCallbacks {
   onError: (error: Error) => void;
 }
 
+export type StreamLineParser = (
+  line: string,
+) => Record<string, unknown> | null;
+
 export function attachStdoutProcessor(
   proc: ChildProcess,
   shortId: string,
   logFilePath: string | undefined,
   callbacks: StreamCallbacks,
+  parseLine?: StreamLineParser,
 ): void {
+  const parser: StreamLineParser =
+    parseLine ??
+    ((line) =>
+      safeJsonParse<Record<string, unknown>>(line, {
+        source: `proc:${shortId}.stdout`,
+      }));
   let buffer = "";
   proc.stdout?.on("data", (chunk: Buffer) => {
     buffer += chunk.toString();
@@ -43,9 +54,7 @@ export function attachStdoutProcessor(
 
     for (const line of lines) {
       if (!line.trim()) continue;
-      const msg = safeJsonParse<Record<string, unknown>>(line, {
-        source: `proc:${shortId}.stdout`,
-      });
+      const msg = parser(line);
       if (!msg) continue;
       callbacks.onMessage(msg);
 

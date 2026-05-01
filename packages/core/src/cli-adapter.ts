@@ -15,6 +15,15 @@ export interface SessionOptions {
   disallowedTools?: string[];
   cwd?: string;
   env?: Record<string, string>;
+  /**
+   * Auto-approve all tool/permission prompts. Translates to CLI-specific flags:
+   * - Claude: `--dangerously-skip-permissions`
+   * - Gemini: `--yolo`
+   *
+   * Intended for non-interactive automated dispatches (e.g. background workers).
+   * Leave unset for interactive chat sessions where a human should approve.
+   */
+  autoApprove?: boolean;
 }
 
 /**

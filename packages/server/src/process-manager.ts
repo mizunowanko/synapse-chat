@@ -3,10 +3,13 @@ import { EventEmitter } from "node:events";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type {
+  CLIAdapter,
   ImageAttachment,
   ProcessManagerLike,
   SendResult,
+  SessionOptions,
 } from "@synapse-chat/core";
+import { claudeAdapter } from "./adapters/claude.js";
 import {
   isRetryableError,
   isRateLimitError,
@@ -20,6 +23,17 @@ export const COMMANDER_ALLOWED_TOOLS =
   "Bash,Read,Glob,Grep,WebSearch,WebFetch";
 
 const CLI_PATH = process.env.CLAUDE_CLI_PATH ?? "claude";
+
+export interface DispatchOptions
+  extends Omit<SessionOptions, "cwd" | "env"> {
+  cwd: string;
+  /** CLI adapter to spawn. Defaults to {@link claudeAdapter}. */
+  adapter?: CLIAdapter;
+  /** Extra env vars merged into the spawned process. */
+  extraEnv?: Record<string, string>;
+  /** Optional log file path; per-line stream messages are appended as JSON. */
+  logFilePath?: string;
+}
 
 export class ProcessManager extends EventEmitter implements ProcessManagerLike {
   private processes = new Map<string, ChildProcess>();
@@ -236,6 +250,44 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
     return proc;
   }
 
+  /**
+   * Adapter-driven dispatch: spawn an arbitrary CLI (Claude, Gemini, custom)
+   * with an adapter that knows how to translate {@link SessionOptions} into
+   * argv and how to parse stdout into {@link StreamMessage}s.
+   *
+   * Unlike {@link dispatchSortie}, this method is not Claude-specific. Use it
+   * for one-off automated work that should be fired against the configured
+   * adapter (e.g. background conflict resolution).
+   */
+  dispatch(id: string, options: DispatchOptions): ChildProcess {
+    const adapter = options.adapter ?? claudeAdapter;
+    const sessionOptions: SessionOptions = {};
+    if (options.prompt !== undefined) sessionOptions.prompt = options.prompt;
+    if (options.systemPrompt !== undefined)
+      sessionOptions.systemPrompt = options.systemPrompt;
+    if (options.resumeSessionId !== undefined)
+      sessionOptions.resumeSessionId = options.resumeSessionId;
+    if (options.allowedTools !== undefined)
+      sessionOptions.allowedTools = options.allowedTools;
+    if (options.disallowedTools !== undefined)
+      sessionOptions.disallowedTools = options.disallowedTools;
+    if (options.autoApprove !== undefined)
+      sessionOptions.autoApprove = options.autoApprove;
+    const args = adapter.buildArgs(sessionOptions);
+
+    const proc = spawn(adapter.command, args, {
+      cwd: options.cwd,
+      env: {
+        ...process.env,
+        ...options.extraEnv,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    this.setupProcess(id, proc, options.logFilePath, adapter);
+    return proc;
+  }
+
   resumeSession(
     id: string,
     sessionId: string,
@@ -308,6 +360,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
     id: string,
     proc: ChildProcess,
     logFilePath?: string,
+    adapter?: CLIAdapter,
   ): void {
     this.processes.set(id, proc);
     this.emit("spawn", id);
@@ -335,7 +388,11 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
       },
     };
 
-    attachStdoutProcessor(proc, shortId, logFilePath, callbacks);
+    const parseLine = adapter
+      ? (line: string) =>
+          adapter.parseOutput(line) as Record<string, unknown> | null
+      : undefined;
+    attachStdoutProcessor(proc, shortId, logFilePath, callbacks, parseLine);
     attachStderrProcessor(proc, shortId, callbacks);
 
     proc.on("exit", (code) => {
