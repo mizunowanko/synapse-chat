@@ -24,6 +24,20 @@ export interface ImageAttachment {
 }
 
 /**
+ * Normalized token usage attached to a `result` {@link StreamMessage}.
+ *
+ * Adapters populate this from the underlying CLI's session-end metadata.
+ * `cacheRead` and `cacheWrite` map to prompt-cache hit / write counts when
+ * the CLI exposes them.
+ */
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+}
+
+/**
  * A single normalized event from a CLI stream.
  *
  * Adapters are responsible for mapping CLI-specific stdout lines to this shape
@@ -44,5 +58,7 @@ export interface StreamMessage {
   timestamp?: number;
   images?: ImageAttachment[];
   imageCount?: number;
+  /** Token usage; populated by adapters on `type: "result"` messages when available. */
+  usage?: TokenUsage;
   [key: string]: unknown;
 }

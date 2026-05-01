@@ -1,4 +1,4 @@
-import type { CLIAdapter, SessionOptions, StreamMessage } from "@synapse-chat/core";
+import type { CLIAdapter, SessionOptions, StreamMessage, TokenUsage } from "@synapse-chat/core";
 
 const GEMINI_RATE_LIMIT_PATTERNS: RegExp[] = [
   /\b429\b/,
@@ -73,12 +73,78 @@ function mapGeminiJsonToStreamMessage(
     return message;
   }
 
+  if (raw.type === "result") {
+    const result = (raw.result ?? raw.content ?? raw.text) as string | undefined;
+    if (typeof result !== "string" || result.length === 0) return null;
+    const message: StreamMessage = { type: "result", content: result };
+    const usage = extractGeminiUsage(raw);
+    if (usage) message.usage = usage;
+    return message;
+  }
+
   const text = raw.text ?? raw.content;
   if (typeof text === "string" && text.length > 0) {
     return { type: "assistant", content: text };
   }
 
   return null;
+}
+
+/**
+ * Extract token usage from a Gemini `result`-shaped JSON payload.
+ *
+ * Accepts either Claude-style snake_case (`input_tokens` / `output_tokens` /
+ * `cache_*_input_tokens`) or Gemini-style camelCase (`promptTokenCount`,
+ * `candidatesTokenCount`, `cachedContentTokenCount`). Returns null when no
+ * recognizable token fields are present.
+ */
+function extractGeminiUsage(
+  raw: Record<string, unknown>,
+): TokenUsage | null {
+  const usage = (raw.usage ?? raw.usageMetadata) as
+    | Record<string, unknown>
+    | undefined;
+  if (!usage || typeof usage !== "object") return null;
+
+  const inputTokens =
+    pickNumber(usage, "input_tokens") ??
+    pickNumber(usage, "inputTokens") ??
+    pickNumber(usage, "promptTokenCount") ??
+    0;
+  const outputTokens =
+    pickNumber(usage, "output_tokens") ??
+    pickNumber(usage, "outputTokens") ??
+    pickNumber(usage, "candidatesTokenCount") ??
+    0;
+  const cacheRead =
+    pickNumber(usage, "cache_read_input_tokens") ??
+    pickNumber(usage, "cacheReadInputTokens") ??
+    pickNumber(usage, "cachedContentTokenCount");
+  const cacheWrite =
+    pickNumber(usage, "cache_creation_input_tokens") ??
+    pickNumber(usage, "cacheCreationInputTokens");
+
+  if (
+    inputTokens === 0 &&
+    outputTokens === 0 &&
+    cacheRead === undefined &&
+    cacheWrite === undefined
+  ) {
+    return null;
+  }
+
+  const result: TokenUsage = { inputTokens, outputTokens };
+  if (cacheRead !== undefined && cacheRead > 0) result.cacheRead = cacheRead;
+  if (cacheWrite !== undefined && cacheWrite > 0) result.cacheWrite = cacheWrite;
+  return result;
+}
+
+function pickNumber(
+  source: Record<string, unknown>,
+  key: string,
+): number | undefined {
+  const value = source[key];
+  return typeof value === "number" ? value : undefined;
 }
 
 export function formatGeminiInput(message: string): string {
