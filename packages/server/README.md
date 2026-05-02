@@ -79,12 +79,32 @@ const handle = startSupervisor({
   wsServerChildScript: "/abs/path/to/ws-server.js",
   childEnv: { MY_APP_VAR: "value" },
   onCrash: (err, ctx) => console.error("supervisor crash", ctx, err),
+
+  // Graceful shutdown — IPC `supervisor:shutdown` first, then SIGKILL after this
+  // window if the children haven't exited.
+  shutdownTimeout: 5_000,
+
+  // Optional liveness probe for the PM worker. Sends an IPC ping every interval;
+  // if no pong is received within `healthCheckTimeout` the worker is SIGKILLed
+  // and restarted via the normal exit path. Omit to disable.
+  healthCheckInterval: 30_000,
+  healthCheckTimeout: 5_000,
+
+  // Cap restart attempts per child. Counter resets after the child stays alive
+  // for ~60s. When exceeded, `onFatal` is called and the supervisor shuts down.
+  maxRestarts: 5,
+  onFatal: (label, count) => {
+    console.error(`supervisor: ${label} died ${count}× — giving up`);
+  },
 });
 
-process.on("SIGTERM", () => handle.shutdown());
+// `stop()` is an alias for `shutdown()` — use whichever reads better.
+process.on("SIGTERM", () => handle.stop());
 ```
 
 The PM worker script should `import { ProcessManager } from "@synapse-chat/server"` and translate IPC commands via `IpcProcessManager`. See `vibe-admiral/engine/src/supervisor.ts` for a reference implementation.
+
+> **Health check scope**: pings target the PM worker only — the WS server child is consumer-supplied and not required to implement `ping`/`pong`. CLI subprocess hangs surface as PM worker latency, which is what the probe catches.
 
 ## Dependencies
 
