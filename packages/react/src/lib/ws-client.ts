@@ -9,6 +9,21 @@
 type MessageHandler<T> = (msg: T) => void;
 type ConnectHandler = () => void;
 
+/**
+ * Lifecycle phase reported by {@link WSClient.status} and the
+ * {@link WSClient.onStatusChange} subscription.
+ *
+ * - `disconnected`: the client is idle. Either it has never been connected,
+ *   or `disconnect()` was called explicitly. No reconnect timer is pending.
+ * - `reconnecting`: a connection attempt is in progress, or a reconnect timer
+ *   is scheduled after a drop. Used for both the initial connect attempt and
+ *   subsequent reconnects so consumers can render a single "trying…" state.
+ * - `connected`: the underlying socket is open.
+ */
+export type ConnectionStatus = "disconnected" | "reconnecting" | "connected";
+
+type StatusHandler = (status: ConnectionStatus) => void;
+
 export interface WSClientLogger {
   log?: (msg: string) => void;
   warn?: (msg: string, ...rest: unknown[]) => void;
@@ -82,9 +97,10 @@ export class WSClient<TServer = unknown, TClient = unknown> {
   private ws: WebSocket | null = null;
   private handlers = new Set<MessageHandler<TServer>>();
   private connectHandlers = new Set<ConnectHandler>();
+  private statusHandlers = new Set<StatusHandler>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
-  private _connected = false;
+  private _status: ConnectionStatus = "disconnected";
   private reconnectAttempt = 0;
 
   private readonly resolveUrl: () => string;
@@ -122,23 +138,32 @@ export class WSClient<TServer = unknown, TClient = unknown> {
   }
 
   get connected(): boolean {
-    return this._connected;
+    return this._status === "connected";
+  }
+
+  /** Current lifecycle phase. See {@link ConnectionStatus}. */
+  get status(): ConnectionStatus {
+    return this._status;
   }
 
   connect(): void {
     if (this.ws?.readyState === WebSocket.OPEN) return;
 
+    // Entering the attempt — surface "trying" state immediately so consumers
+    // can render reconnect feedback without waiting for the first onopen/onclose.
+    this.setStatus("reconnecting");
+
     try {
       this.ws = new WebSocket(this.resolveUrl());
 
       this.ws.onopen = () => {
-        this._connected = true;
         this.reconnectAttempt = 0;
         this.logger.log("WSClient: connected");
         if (this.reconnectTimer) {
           clearTimeout(this.reconnectTimer);
           this.reconnectTimer = null;
         }
+        this.setStatus("connected");
         this.resetPingTimeout();
         for (const handler of this.connectHandlers) handler();
       };
@@ -166,14 +191,17 @@ export class WSClient<TServer = unknown, TClient = unknown> {
       };
 
       this.ws.onclose = () => {
-        this._connected = false;
         this.clearPingTimeout();
         this.logger.log("WSClient: disconnected");
+        // setStatus is folded into scheduleReconnect so we always reflect
+        // the next attempt rather than briefly flickering to "disconnected".
         this.scheduleReconnect();
       };
 
       this.ws.onerror = () => {
-        this._connected = false;
+        // Don't flip to "disconnected" here — onclose follows for any real
+        // failure and will schedule a reconnect, which is the source of truth
+        // for the status. Treating onerror as terminal would cause a flicker.
       };
     } catch {
       this.scheduleReconnect();
@@ -186,18 +214,36 @@ export class WSClient<TServer = unknown, TClient = unknown> {
       this.reconnectTimer = null;
     }
     this.clearPingTimeout();
-    this.ws?.close();
+    if (this.ws) {
+      // Detach handlers before close() so the synchronous onclose dispatch
+      // doesn't re-enter scheduleReconnect — disconnect() is "stop and stay
+      // stopped", not "drop and try again".
+      this.ws.onopen = null;
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      this.ws.onmessage = null;
+      this.ws.close();
+    }
     this.ws = null;
-    this._connected = false;
     this.reconnectAttempt = 0;
+    this.setStatus("disconnected");
   }
 
-  send(msg: TClient): void {
+  /**
+   * Serialize and write `msg` to the underlying socket.
+   *
+   * Returns `true` when the payload was handed off to the socket, `false`
+   * when the socket is not open (the caller can then queue it for later).
+   * The return value is the only signal callers get — write failures after
+   * the socket accepts the payload surface via `onclose`/`onerror`.
+   */
+  send(msg: TClient): boolean {
     if (this.ws?.readyState !== WebSocket.OPEN) {
       this.logger.warn("WSClient: not connected, message dropped", msg);
-      return;
+      return false;
     }
     this.ws.send(JSON.stringify(msg));
+    return true;
   }
 
   onMessage(handler: MessageHandler<TServer>): () => void {
@@ -214,7 +260,28 @@ export class WSClient<TServer = unknown, TClient = unknown> {
     };
   }
 
+  /**
+   * Subscribe to lifecycle changes. The handler fires with the new
+   * {@link ConnectionStatus} every time it transitions; identical-status
+   * notifications are suppressed.
+   */
+  onStatusChange(handler: StatusHandler): () => void {
+    this.statusHandlers.add(handler);
+    return () => {
+      this.statusHandlers.delete(handler);
+    };
+  }
+
+  private setStatus(next: ConnectionStatus): void {
+    if (this._status === next) return;
+    this._status = next;
+    for (const handler of this.statusHandlers) handler(next);
+  }
+
   private scheduleReconnect(): void {
+    // Always reflect "trying to come back" — even if a timer is already armed
+    // (the previous status may have been "connected" right before onclose).
+    this.setStatus("reconnecting");
     if (this.reconnectTimer) return;
     const delay = Math.min(
       this.backoffBaseMs * Math.pow(2, this.reconnectAttempt),
