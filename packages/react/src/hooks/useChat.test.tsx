@@ -23,22 +23,29 @@ function makeFakeClient(): FakeClient {
   };
 }
 
-// Hoisted so the `vi.mock` factory can see it.
+// Hoisted so the `vi.mock` factory can see it. The `client` object is created
+// once and reused across calls to mirror useWebSocket's `useRef` semantics —
+// consumers rely on `client` being referentially stable across renders.
 const fakeClient = vi.hoisted(() => {
   const handlers = new Set<(raw: unknown) => void>();
+  const onMessage = (h: (raw: unknown) => void) => {
+    handlers.add(h);
+    return () => handlers.delete(h);
+  };
+  const clientSend = vi.fn();
+  const client = { onMessage, send: clientSend };
   return {
     handlers,
-    onMessage: (h: (raw: unknown) => void) => {
-      handlers.add(h);
-      return () => handlers.delete(h);
-    },
+    onMessage,
     send: vi.fn(),
+    clientSend,
+    client,
   };
 });
 
 vi.mock("./useWebSocket.js", () => ({
   useWebSocket: () => ({
-    client: { onMessage: fakeClient.onMessage },
+    client: fakeClient.client,
     isConnected: true,
     send: fakeClient.send,
   }),
@@ -48,6 +55,7 @@ afterEach(() => {
   cleanup();
   fakeClient.handlers.clear();
   fakeClient.send.mockReset();
+  fakeClient.clientSend.mockReset();
 });
 
 const wsOptions = { url: "ws://test" };
@@ -202,6 +210,33 @@ describe("useChat — storage integration", () => {
     const { result } = renderHook(() => useChat({ wsOptions, decode, storage }));
     expect(result.current.isHydrating).toBe(false);
     expect(load).not.toHaveBeenCalled();
+  });
+});
+
+describe("useChat — client exposure (issue #8)", () => {
+  it("exposes the underlying WSClient on the result", () => {
+    const { result } = renderHook(() => useChat({ wsOptions, decode }));
+    expect(result.current.client).toBeDefined();
+    expect(typeof result.current.client.send).toBe("function");
+  });
+
+  it("returns a stable client across re-renders", () => {
+    const { result, rerender } = renderHook(() =>
+      useChat({ wsOptions, decode }),
+    );
+    const first = result.current.client;
+    rerender();
+    expect(result.current.client).toBe(first);
+  });
+
+  it("forwards arbitrary messages through client.send without re-encoding", () => {
+    const { result } = renderHook(() => useChat({ wsOptions, decode }));
+    const raw = { type: "app:reset" };
+    act(() => {
+      result.current.client.send(raw);
+    });
+    expect(fakeClient.clientSend).toHaveBeenCalledWith(raw);
+    expect(fakeClient.send).not.toHaveBeenCalled();
   });
 });
 

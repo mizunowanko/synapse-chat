@@ -84,6 +84,41 @@ to surface specific system subtypes (e.g. status badges, log entries) pass a
 />
 ```
 
+## Pitfalls
+
+### Don't pair `useChat` with a separate `useWebSocket` for the same URL
+
+`useChat` already calls `useWebSocket` internally. Each `useWebSocket`
+instantiates its own `WSClient`, so this opens **two** sockets to the same
+server from a single component:
+
+```tsx
+// ❌ Two sockets — useChat + useWebSocket each create a WSClient
+function App() {
+  const { sendMessage, messages } = useChat({ wsOptions: { url } });
+  const { send } = useWebSocket({ url }); // ← second connection
+  // ...
+}
+```
+
+If you need to send arbitrary client messages (control frames like
+`{ type: "app:reset" }`, custom commands, etc.) alongside chat traffic, use
+the `client` returned by `useChat`:
+
+```tsx
+// ✅ One socket — reuse the client useChat already owns
+function App() {
+  const { sendMessage, messages, client } = useChat({ wsOptions: { url } });
+
+  const reset = () => client.send({ type: "app:reset" });
+  // ...
+}
+```
+
+`client` is the same `WSClient` instance `useChat` uses internally and is
+stable across renders, so you can also call `client.onMessage(...)` to
+subscribe to raw frames `decode` chose to ignore.
+
 ## License
 
 MIT
