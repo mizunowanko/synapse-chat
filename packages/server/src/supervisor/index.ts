@@ -2,6 +2,7 @@ export {
   startSupervisor,
   type SupervisorOptions,
   type SupervisorHandle,
+  type ChildLabel,
 } from "./supervisor.js";
 export { IpcProcessManager, type IpcChannel } from "./ipc-process-manager.js";
 export type {

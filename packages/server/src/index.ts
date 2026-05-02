@@ -25,6 +25,7 @@ export {
   startSupervisor,
   type SupervisorOptions,
   type SupervisorHandle,
+  type ChildLabel,
 } from "./supervisor/supervisor.js";
 export {
   IpcProcessManager,
