@@ -11,7 +11,7 @@ import type {
   ImageAttachment,
   StreamMessage,
 } from "@synapse-chat/core";
-import type { WSClientOptions } from "../lib/ws-client.js";
+import type { WSClient, WSClientOptions } from "../lib/ws-client.js";
 import { useWebSocket } from "./useWebSocket.js";
 
 export interface UseChatOptions<TServer = unknown, TClient = unknown> {
@@ -49,7 +49,7 @@ export interface UseChatOptions<TServer = unknown, TClient = unknown> {
   saveDebounceMs?: number;
 }
 
-export interface UseChatResult {
+export interface UseChatResult<TServer = unknown, TClient = unknown> {
   /** Messages in display order. */
   messages: StreamMessage[];
   /** Replace the message list wholesale (e.g. to load history). */
@@ -67,6 +67,13 @@ export interface UseChatResult {
    * `false` when no storage/sessionId is configured.
    */
   isHydrating: boolean;
+  /**
+   * The underlying {@link WSClient}. Stable across renders. Use this to send
+   * arbitrary client messages (e.g. control frames like `{ type: "app:reset" }`)
+   * without spinning up a second `useWebSocket` — which would open a second
+   * socket, since each `useWebSocket` instantiates its own client.
+   */
+  client: WSClient<TServer, TClient>;
 }
 
 function defaultEncode<TClient>(text: string, images?: ImageAttachment[]): TClient {
@@ -94,7 +101,7 @@ function defaultEncode<TClient>(text: string, images?: ImageAttachment[]): TClie
  */
 export function useChat<TServer = unknown, TClient = unknown>(
   options: UseChatOptions<TServer, TClient>,
-): UseChatResult {
+): UseChatResult<TServer, TClient> {
   const {
     wsOptions,
     decode,
@@ -197,5 +204,6 @@ export function useChat<TServer = unknown, TClient = unknown>(
     sendMessage,
     isConnected,
     isHydrating,
+    client,
   };
 }
