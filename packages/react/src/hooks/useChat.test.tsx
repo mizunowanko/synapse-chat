@@ -27,35 +27,66 @@ function makeFakeClient(): FakeClient {
 // once and reused across calls to mirror useWebSocket's `useRef` semantics —
 // consumers rely on `client` being referentially stable across renders.
 const fakeClient = vi.hoisted(() => {
-  const handlers = new Set<(raw: unknown) => void>();
+  const messageHandlers = new Set<(raw: unknown) => void>();
+  const statusHandlers = new Set<
+    (s: "disconnected" | "reconnecting" | "connected") => void
+  >();
+  let currentStatus: "disconnected" | "reconnecting" | "connected" = "connected";
+
   const onMessage = (h: (raw: unknown) => void) => {
-    handlers.add(h);
-    return () => handlers.delete(h);
+    messageHandlers.add(h);
+    return () => messageHandlers.delete(h);
+  };
+  const onStatusChange = (
+    h: (s: "disconnected" | "reconnecting" | "connected") => void,
+  ) => {
+    statusHandlers.add(h);
+    return () => statusHandlers.delete(h);
   };
   const clientSend = vi.fn();
-  const client = { onMessage, send: clientSend };
-  return {
-    handlers,
+
+  const client = {
     onMessage,
-    send: vi.fn(),
-    clientSend,
+    onStatusChange,
+    send: clientSend,
+    get status() {
+      return currentStatus;
+    },
+  };
+
+  return {
+    messageHandlers,
+    statusHandlers,
+    getStatus: () => currentStatus,
+    setStatus: (next: "disconnected" | "reconnecting" | "connected") => {
+      currentStatus = next;
+      for (const h of statusHandlers) h(next);
+    },
+    onMessage,
+    onStatusChange,
     client,
+    clientSend,
+    send: vi.fn(() => true),
   };
 });
 
 vi.mock("./useWebSocket.js", () => ({
   useWebSocket: () => ({
     client: fakeClient.client,
-    isConnected: true,
+    isConnected: fakeClient.getStatus() === "connected",
+    connectionStatus: fakeClient.getStatus(),
     send: fakeClient.send,
   }),
 }));
 
 afterEach(() => {
   cleanup();
-  fakeClient.handlers.clear();
+  fakeClient.messageHandlers.clear();
+  fakeClient.statusHandlers.clear();
   fakeClient.send.mockReset();
+  fakeClient.send.mockImplementation(() => true);
   fakeClient.clientSend.mockReset();
+  fakeClient.setStatus("connected");
 });
 
 const wsOptions = { url: "ws://test" };
@@ -92,7 +123,8 @@ describe("useChat — backward compatibility", () => {
   it("appends decoded messages from the websocket", () => {
     const { result } = renderHook(() => useChat({ wsOptions, decode }));
     act(() => {
-      for (const h of fakeClient.handlers) h({ type: "assistant", content: "yo" });
+      for (const h of fakeClient.messageHandlers)
+        h({ type: "assistant", content: "yo" });
     });
     expect(result.current.messages).toEqual([{ type: "assistant", content: "yo" }]);
   });
@@ -237,6 +269,199 @@ describe("useChat — client exposure (issue #8)", () => {
     });
     expect(fakeClient.clientSend).toHaveBeenCalledWith(raw);
     expect(fakeClient.send).not.toHaveBeenCalled();
+  });
+});
+
+describe("useChat — optimistic send (online)", () => {
+  it("appends a pending user message synchronously and marks it sent on success", () => {
+    const { result } = renderHook(() => useChat({ wsOptions, decode }));
+
+    let id: string;
+    act(() => {
+      id = result.current.sendMessage("hello");
+    });
+
+    expect(fakeClient.send).toHaveBeenCalledTimes(1);
+    expect(result.current.messages).toHaveLength(1);
+    const msg = result.current.messages[0];
+    expect(msg?.type).toBe("user");
+    expect(msg?.content).toBe("hello");
+    expect(msg?.meta?.clientMessageId).toBe(id!);
+    // Without ackPredicate, the entry transitions to "sent" immediately.
+    expect(msg?.meta?.optimisticStatus).toBe("sent");
+    expect(result.current.pendingMessageIds).toEqual([]);
+  });
+
+  it("includes images on the optimistic message and the wire payload", () => {
+    const { result } = renderHook(() => useChat({ wsOptions, decode }));
+    const images = [
+      { base64: "abc", mediaType: "image/png" as const },
+    ];
+
+    act(() => {
+      result.current.sendMessage("look", images);
+    });
+
+    expect(result.current.messages[0]?.images).toEqual(images);
+    const sent = fakeClient.send.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(sent.images).toEqual(images);
+    expect(sent.content).toBe("look");
+    expect(typeof sent.clientMessageId).toBe("string");
+  });
+
+  it("uses a custom encoder when provided", () => {
+    const encode = vi.fn(
+      (text: string, _images: unknown, id: string) => ({
+        kind: "msg",
+        text,
+        id,
+      }),
+    );
+    const { result } = renderHook(() =>
+      useChat({ wsOptions, decode, encode }),
+    );
+
+    act(() => {
+      result.current.sendMessage("custom");
+    });
+    expect(encode).toHaveBeenCalledTimes(1);
+    expect(fakeClient.send.mock.calls[0]?.[0]).toMatchObject({
+      kind: "msg",
+      text: "custom",
+    });
+  });
+});
+
+describe("useChat — optimistic send (offline + retry)", () => {
+  it("queues messages while offline and flushes them on reconnect", () => {
+    fakeClient.setStatus("reconnecting");
+    fakeClient.send.mockImplementation(() => false);
+
+    const { result } = renderHook(() => useChat({ wsOptions, decode }));
+
+    act(() => {
+      result.current.sendMessage("offline-1");
+      result.current.sendMessage("offline-2");
+    });
+
+    expect(result.current.pendingMessageIds).toHaveLength(2);
+    expect(result.current.messages).toHaveLength(2);
+    for (const m of result.current.messages) {
+      expect(m.meta?.optimisticStatus).toBe("pending");
+    }
+    expect(fakeClient.send).toHaveBeenCalledTimes(2); // both attempts dropped
+
+    // Come back online — the status subscription flushes the queue.
+    fakeClient.send.mockImplementation(() => true);
+    act(() => {
+      fakeClient.setStatus("connected");
+    });
+
+    expect(result.current.pendingMessageIds).toEqual([]);
+    expect(result.current.messages).toHaveLength(2);
+    for (const m of result.current.messages) {
+      expect(m.meta?.optimisticStatus).toBe("sent");
+    }
+    // 2 initial attempts + 2 reconnect flush attempts.
+    expect(fakeClient.send).toHaveBeenCalledTimes(4);
+  });
+
+  it("rolls back and fires onSendError after maxRetries reconnect cycles fail", () => {
+    fakeClient.setStatus("reconnecting");
+    fakeClient.send.mockImplementation(() => false);
+    const onSendError = vi.fn();
+
+    const { result } = renderHook(() =>
+      useChat({ wsOptions, decode, maxRetries: 2, onSendError }),
+    );
+
+    act(() => {
+      result.current.sendMessage("doomed");
+    });
+    expect(result.current.messages).toHaveLength(1);
+
+    // Two reconnect cycles, both failing — second one trips maxRetries.
+    act(() => {
+      fakeClient.setStatus("connected");
+    });
+    expect(onSendError).not.toHaveBeenCalled();
+    expect(result.current.messages).toHaveLength(1);
+
+    act(() => {
+      fakeClient.setStatus("reconnecting");
+    });
+    act(() => {
+      fakeClient.setStatus("connected");
+    });
+
+    expect(onSendError).toHaveBeenCalledTimes(1);
+    expect(onSendError.mock.calls[0]?.[0]?.content).toBe("doomed");
+    expect(onSendError.mock.calls[0]?.[1]).toBe("max-retries-exceeded");
+    expect(result.current.messages).toHaveLength(0);
+    expect(result.current.pendingMessageIds).toEqual([]);
+  });
+
+  it("clear() drops pending entries without firing onSendError", () => {
+    fakeClient.setStatus("reconnecting");
+    fakeClient.send.mockImplementation(() => false);
+    const onSendError = vi.fn();
+    const { result } = renderHook(() =>
+      useChat({ wsOptions, decode, onSendError }),
+    );
+
+    act(() => {
+      result.current.sendMessage("never-mind");
+    });
+    expect(result.current.pendingMessageIds).toHaveLength(1);
+
+    act(() => {
+      result.current.clear();
+    });
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.pendingMessageIds).toEqual([]);
+
+    // A subsequent reconnect must not resurrect the cleared entry.
+    fakeClient.send.mockImplementation(() => true);
+    act(() => {
+      fakeClient.setStatus("connected");
+    });
+    expect(fakeClient.send).toHaveBeenCalledTimes(1); // only the original failed attempt
+    expect(onSendError).not.toHaveBeenCalled();
+  });
+});
+
+describe("useChat — ack predicate", () => {
+  it("removes the optimistic placeholder when the server acks the message", () => {
+    const ackPredicate = (raw: unknown) => {
+      const r = raw as { type?: string; ackId?: string };
+      return r.type === "ack" && typeof r.ackId === "string" ? r.ackId : null;
+    };
+    const { result } = renderHook(() =>
+      useChat({
+        wsOptions,
+        decode: (raw) => {
+          const r = raw as { type?: string };
+          // Drop ack frames from the rendered list.
+          return r.type === "ack" ? null : (raw as StreamMessage);
+        },
+        ackPredicate,
+      }),
+    );
+
+    let id: string;
+    act(() => {
+      id = result.current.sendMessage("ping?");
+    });
+    // With ackPredicate set, the optimistic entry stays "pending" until the ack.
+    expect(result.current.messages[0]?.meta?.optimisticStatus).toBe("pending");
+    expect(result.current.pendingMessageIds).toEqual([id!]);
+
+    act(() => {
+      for (const h of fakeClient.messageHandlers) h({ type: "ack", ackId: id! });
+    });
+
+    expect(result.current.pendingMessageIds).toEqual([]);
+    expect(result.current.messages).toEqual([]); // optimistic placeholder dropped
   });
 });
 

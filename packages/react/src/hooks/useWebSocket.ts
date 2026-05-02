@@ -1,13 +1,26 @@
 import { useEffect, useRef, useState } from "react";
-import { WSClient, type WSClientOptions } from "../lib/ws-client.js";
+import {
+  WSClient,
+  type ConnectionStatus,
+  type WSClientOptions,
+} from "../lib/ws-client.js";
 
 export interface UseWebSocketResult<TServer, TClient> {
   /** The underlying `WSClient` instance. Stable across renders. */
   client: WSClient<TServer, TClient>;
   /** `true` once the socket is open, flips back to `false` on disconnect. */
   isConnected: boolean;
-  /** Send a message over the socket. Drops the message if not connected. */
-  send: (msg: TClient) => void;
+  /**
+   * Fine-grained lifecycle phase. Distinguishes "trying to come back" from
+   * "fully idle" — useful for offline indicators.
+   */
+  connectionStatus: ConnectionStatus;
+  /**
+   * Send a message over the socket. Returns `true` when the payload was
+   * handed off to the socket, `false` when it was dropped because the
+   * socket was not open.
+   */
+  send: (msg: TClient) => boolean;
 }
 
 /**
@@ -17,7 +30,8 @@ export interface UseWebSocketResult<TServer, TClient> {
  * - Subsequent option changes do NOT recreate the client (by design — chat UIs
  *   typically want a stable connection across prop updates). Pass `key` on the
  *   parent component to force a fresh instance.
- * - Subscribes to connect events to maintain an `isConnected` flag.
+ * - Subscribes to status changes to maintain `connectionStatus` and the
+ *   derived `isConnected` flag.
  */
 export function useWebSocket<TServer = unknown, TClient = unknown>(
   options: WSClientOptions<TServer, TClient>,
@@ -28,25 +42,27 @@ export function useWebSocket<TServer = unknown, TClient = unknown>(
   }
   const client = clientRef.current;
 
-  const [isConnected, setIsConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(
+    () => client.status,
+  );
 
   useEffect(() => {
-    const unsubConnect = client.onConnect(() => setIsConnected(true));
+    // Seed from the client in case its status changed between hook init
+    // and effect run (e.g. StrictMode double-invocation).
+    setConnectionStatus(client.status);
+    const unsubStatus = client.onStatusChange(setConnectionStatus);
     client.connect();
-    const poll = setInterval(() => {
-      setIsConnected((prev) => (client.connected ? prev || true : false));
-    }, 1000);
     return () => {
-      unsubConnect();
-      clearInterval(poll);
+      unsubStatus();
       client.disconnect();
     };
-    // Client instance is stable; intentionally empty deps.
+    // Client instance is stable; intentionally a single dep.
   }, [client]);
 
   return {
     client,
-    isConnected,
+    isConnected: connectionStatus === "connected",
+    connectionStatus,
     send: (msg) => client.send(msg),
   };
 }

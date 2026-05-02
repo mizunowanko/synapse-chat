@@ -9,11 +9,17 @@ export {
 } from "./components/ToolUseGroup.js";
 export { SessionInput, type SessionInputProps } from "./components/SessionInput.js";
 
-export { useChat, type UseChatOptions, type UseChatResult } from "./hooks/useChat.js";
+export {
+  useChat,
+  type UseChatOptions,
+  type UseChatResult,
+  type OptimisticMessageStatus,
+} from "./hooks/useChat.js";
 export {
   useWebSocket,
   type UseWebSocketResult,
 } from "./hooks/useWebSocket.js";
+export { useConnectionStatus } from "./hooks/useConnectionStatus.js";
 export {
   useTokenUsage,
   type CumulativeTokenUsage,
@@ -24,6 +30,7 @@ export {
   defaultWsUrl,
   type WSClientOptions,
   type WSClientLogger,
+  type ConnectionStatus,
 } from "./lib/ws-client.js";
 export {
   groupToolMessages,
