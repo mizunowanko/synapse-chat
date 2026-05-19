@@ -16,3 +16,11 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# vibe-admiral / Claude Code Engine が注入する transient ファイル
+.claude/skills/*/
+.claude/rules/
+.claude/workflow-state.json
+.claude/ship-log.jsonl
+.claude/escort-log.jsonl
+.claude/.escort-stash/
