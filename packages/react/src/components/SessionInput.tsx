@@ -17,6 +17,14 @@ const ACCEPTED_TYPES = new Set<string>([
   "image/jpeg",
   "image/gif",
   "image/webp",
+  "text/plain",
+  "text/csv",
+  "text/markdown",
+  "application/pdf",
+  "application/json",
+  "application/yaml",
+  "text/yaml",
+  "text/x-yaml",
 ]);
 
 type ImageMediaType = ImageAttachment["mediaType"];
@@ -271,7 +279,7 @@ export function SessionInput({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/png,image/jpeg,image/gif,image/webp"
+          accept="image/*,text/*,.csv,.md,.txt,.pdf,.json,.yaml,.yml"
           multiple
           className="hidden"
           onChange={handleFileChange}
