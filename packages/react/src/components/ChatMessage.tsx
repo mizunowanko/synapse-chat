@@ -180,7 +180,8 @@ export const ChatMessage = memo(function ChatMessage({
     >
       <div
         className={cn(
-          "max-w-[80%] rounded-lg px-3 py-2 text-sm",
+          "rounded-lg px-3 py-2 text-sm",
+          isRightAligned ? "max-w-[80%]" : "w-full",
           isUser || isAssistantOnRight
             ? "bg-primary text-primary-foreground"
             : isError
