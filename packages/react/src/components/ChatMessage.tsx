@@ -6,11 +6,11 @@ import {
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { type Components, defaultUrlTransform } from "react-markdown";
 import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
 import type { ImageAttachment, StreamMessage } from "@synapse-chat/core";
-import { cn } from "../lib/utils.js";
+import { cn, isSafeUrl } from "../lib/utils.js";
 import { formatTime } from "../lib/format-time.js";
 import { remarkIssueLink } from "../lib/remark-issue-link.js";
 
@@ -37,11 +37,14 @@ function useImageObjectUrls(images: ImageAttachment[] | undefined): string[] {
 }
 
 const MARKDOWN_COMPONENTS: Components = {
-  a: ({ href, children }: ComponentPropsWithoutRef<"a">) => (
-    <a href={href} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  ),
+  a: ({ href, children }: ComponentPropsWithoutRef<"a">) =>
+    isSafeUrl(href ?? "") ? (
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    ) : (
+      <a href={href}>{children}</a>
+    ),
 };
 
 /** Rendering context for alignment and styling decisions. */
@@ -72,6 +75,8 @@ export interface ChatMessageProps {
    * `null` to fall through to default rendering.
    */
   renderMeta?: (message: StreamMessage) => ReactNode | null;
+  /** Override react-markdown's URL sanitizer. Use this to allow custom URL schemes (e.g. `familia://`). */
+  urlTransform?: (url: string) => string;
 }
 
 export const ChatMessage = memo(function ChatMessage({
@@ -80,6 +85,7 @@ export const ChatMessage = memo(function ChatMessage({
   ownerRepo,
   renderSystem,
   renderMeta,
+  urlTransform = defaultUrlTransform,
 }: ChatMessageProps) {
   const [toolExpanded, setToolExpanded] = useState(false);
   const [resultExpanded, setResultExpanded] = useState(false);
@@ -224,6 +230,7 @@ export const ChatMessage = memo(function ChatMessage({
               components={MARKDOWN_COMPONENTS}
               disallowedElements={["img"]}
               unwrapDisallowed
+              urlTransform={urlTransform}
             >
               {content}
             </ReactMarkdown>
