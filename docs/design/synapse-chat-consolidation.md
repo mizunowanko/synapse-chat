@@ -1,7 +1,7 @@
 # Design Doc: synapse-chat フィーチャー統合
 
 > **ステータス**: Draft  
-> **関連 ADR**: [ADR-0001](../../adr/0001-synapse-chat-feature-consolidation.md)  
+> **関連 ADR**: [ADR-0001](../adr/0001-synapse-chat-feature-consolidation.md)  
 > **関連 Issue**: [#20](https://github.com/mizunowanko/synapse-chat/issues/20)
 
 ---
@@ -659,7 +659,7 @@ Phase C (synapse-chat リリース後):
 
 ## 8. 参照
 
-- [ADR-0001](../../adr/0001-synapse-chat-feature-consolidation.md)
+- [ADR-0001](../adr/0001-synapse-chat-feature-consolidation.md)
 - [Issue #20](https://github.com/mizunowanko/synapse-chat/issues/20): この design doc の起点
 - 子 Issues: [#21](https://github.com/mizunowanko/synapse-chat/issues/21), [#22](https://github.com/mizunowanko/synapse-chat/issues/22), [#23](https://github.com/mizunowanko/synapse-chat/issues/23), [#24](https://github.com/mizunowanko/synapse-chat/issues/24), [#25](https://github.com/mizunowanko/synapse-chat/issues/25)
 - `@synapse-chat/react` 現行 API: [`packages/react/src/index.ts`](../../packages/react/src/index.ts)
