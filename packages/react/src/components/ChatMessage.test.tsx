@@ -35,25 +35,25 @@ describe("<ChatMessage />", () => {
     expect(screen.getByTestId("status")).toHaveTextContent("OK");
   });
 
-  it("renders CompactionBadge for compact-status subtype", () => {
-    render(
+  it("returns null for compact-status system message without a renderer", () => {
+    const { container } = render(
       <ChatMessage
         message={{ type: "system", subtype: "compact-status", content: "Compacting context..." }}
       />,
     );
-    expect(screen.getByText("Compacting context…")).toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders CompactionBadge for compacting subtype", () => {
-    render(
+  it("returns null for compacting system message without a renderer", () => {
+    const { container } = render(
       <ChatMessage
         message={{ type: "system", subtype: "compacting", content: "" }}
       />,
     );
-    expect(screen.getByText("Compacting context…")).toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it("renderSystem overrides CompactionBadge when provided", () => {
+  it("renderSystem returning null hides system message", () => {
     const { container } = render(
       <ChatMessage
         message={{ type: "system", subtype: "compact-status", content: "x" }}
