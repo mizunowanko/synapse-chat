@@ -11,3 +11,9 @@ export {
   parseGeminiOutput,
   formatGeminiInput,
 } from "./gemini.js";
+
+export {
+  gemmaAdapter,
+  buildGemmaArgs,
+  parseGemmaOutput,
+} from "./gemma.js";
