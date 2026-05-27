@@ -13,6 +13,7 @@ import type { ImageAttachment, StreamMessage } from "@synapse-chat/core";
 import { cn, isSafeUrl } from "../lib/utils.js";
 import { formatTime } from "../lib/format-time.js";
 import { remarkIssueLink } from "../lib/remark-issue-link.js";
+import { CompactionBadge } from "./CompactionBadge.js";
 
 /** Convert base64 ImageAttachments to object URLs, revoking on cleanup. */
 function useImageObjectUrls(images: ImageAttachment[] | undefined): string[] {
@@ -165,6 +166,9 @@ export const ChatMessage = memo(function ChatMessage({
     if (renderSystem) {
       const rendered = renderSystem(message);
       return rendered === null || rendered === undefined ? null : <>{rendered}</>;
+    }
+    if (message.subtype === "compact-status" || message.subtype === "compacting") {
+      return <CompactionBadge />;
     }
     return null;
   }

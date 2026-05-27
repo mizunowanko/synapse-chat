@@ -4,6 +4,10 @@ export {
   type ChatMessageProps,
 } from "./components/ChatMessage.js";
 export {
+  CompactionBadge,
+  type CompactionBadgeProps,
+} from "./components/CompactionBadge.js";
+export {
   ToolUseGroup,
   type ToolUseGroupProps,
 } from "./components/ToolUseGroup.js";
