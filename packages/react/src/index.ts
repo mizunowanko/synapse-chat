@@ -17,6 +17,11 @@ export {
   type ConnectionStatusBadgeVariant,
 } from "./components/ConnectionStatusBadge.js";
 export {
+  SystemMessageBadge,
+  type SystemMessageBadgeProps,
+  type SystemMessageVariantConfig,
+} from "./components/SystemMessageBadge.js";
+export {
   ToolUseGroup,
   type ToolUseGroupProps,
 } from "./components/ToolUseGroup.js";
