@@ -8,6 +8,11 @@ export {
   type CompactionBadgeProps,
 } from "./components/CompactionBadge.js";
 export {
+  ConnectionStatusBadge,
+  type ConnectionStatusBadgeProps,
+  type ConnectionStatusBadgeVariant,
+} from "./components/ConnectionStatusBadge.js";
+export {
   ToolUseGroup,
   type ToolUseGroupProps,
 } from "./components/ToolUseGroup.js";
