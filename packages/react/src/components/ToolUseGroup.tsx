@@ -6,13 +6,14 @@ import type { ToolUseGroupItem } from "../lib/group-tool-messages.js";
 export interface ToolUseGroupProps {
   group: ToolUseGroupItem;
   context?: ChatMessageContext;
+  maxOutputLines?: number;
 }
 
 /**
  * Collapsible wrapper for a sequence of consecutive `tool_use` / `tool_result`
  * messages produced by {@link groupToolMessages}.
  */
-export function ToolUseGroup({ group, context }: ToolUseGroupProps) {
+export function ToolUseGroup({ group, context, maxOutputLines }: ToolUseGroupProps) {
   const [expanded, setExpanded] = useState(false);
   const toolUseCount = group.messages.filter((m) => m.type === "tool_use").length;
 
@@ -42,6 +43,7 @@ export function ToolUseGroup({ group, context }: ToolUseGroupProps) {
               key={msg.timestamp ?? i}
               message={msg}
               {...(context !== undefined ? { context } : {})}
+              {...(maxOutputLines !== undefined ? { maxOutputLines } : {})}
             />
           ))}
         </div>
