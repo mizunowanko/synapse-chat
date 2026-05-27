@@ -34,13 +34,22 @@ const WS_OPTIONS: WSClientOptions<ServerMessage, ClientMessage> = {
   pongMessage: { type: "pong" },
 };
 
+// Static demo messages shown before a real session starts.
+const DEMO_MESSAGES: StreamMessage[] = [
+  {
+    type: "assistant",
+    content:
+      "## Markdown スタイルデモ\n\n`@synapse-chat/react/styles` を import すると以下のスタイルが適用されます。\n\n### テーブル\n\n| パッケージ | バージョン | 用途 |\n|------------|-----------|------|\n| `react-markdown` | ^10 | Markdown → HTML 変換 |\n| `remark-gfm` | ^4 | GFM 拡張（テーブル等）|\n| `@synapse-chat/react` | 0.x | このライブラリ |\n\n### コードブロック\n\n```typescript\nimport \"@synapse-chat/react/styles\";\nimport { ChatMessage } from \"@synapse-chat/react\";\n```\n\n### Blockquote\n\n> CSS カスタムプロパティ（`--synapse-chat-border` 等）を上書きするだけでテーマをカスタマイズできます。\n\n### リスト\n\n- テーブル罫線\n- コードブロック背景\n- Blockquote 左ボーダー\n- リストスタイル",
+  },
+];
+
 /* ────────────────────────────────────────────────────────────────────────── */
 /* App                                                                        */
 /* ────────────────────────────────────────────────────────────────────────── */
 
 export function App() {
   const [draft, setDraft] = useState("");
-  const [messages, setMessages] = useState<StreamMessage[]>([]);
+  const [messages, setMessages] = useState<StreamMessage[]>(DEMO_MESSAGES);
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
 
   const { client, isConnected, send } = useWebSocket(WS_OPTIONS);
@@ -136,7 +145,7 @@ export function App() {
 
       <main className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-3xl flex-col gap-3">
-          {groups.length === 0 && (
+          {messages.length === 0 && (
             <p className="text-sm text-muted-foreground">
               Type a message below to start a Claude CLI session. The server
               will spawn <code>claude</code> on first send.

@@ -1,0 +1,143 @@
+:root {
+  --synapse-chat-border: #e2e8f0;
+  --synapse-chat-code-bg: #f8fafc;
+  --synapse-chat-muted: #64748b;
+}
+
+.synapse-chat-markdown {
+  line-height: 1.6;
+}
+
+/* Headings */
+.synapse-chat-markdown h1,
+.synapse-chat-markdown h2,
+.synapse-chat-markdown h3,
+.synapse-chat-markdown h4,
+.synapse-chat-markdown h5,
+.synapse-chat-markdown h6 {
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.synapse-chat-markdown h1 { font-size: 1.5em; }
+.synapse-chat-markdown h2 { font-size: 1.25em; }
+.synapse-chat-markdown h3 { font-size: 1.125em; }
+
+/* Paragraphs */
+.synapse-chat-markdown p {
+  margin-top: 0;
+  margin-bottom: 0.75em;
+}
+
+.synapse-chat-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+/* Lists */
+.synapse-chat-markdown ul,
+.synapse-chat-markdown ol {
+  margin-top: 0;
+  margin-bottom: 0.75em;
+  padding-left: 1.5em;
+}
+
+.synapse-chat-markdown ul {
+  list-style-type: disc;
+}
+
+.synapse-chat-markdown ol {
+  list-style-type: decimal;
+}
+
+.synapse-chat-markdown li {
+  margin-bottom: 0.25em;
+}
+
+.synapse-chat-markdown li > ul,
+.synapse-chat-markdown li > ol {
+  margin-top: 0.25em;
+  margin-bottom: 0;
+}
+
+/* Tables */
+.synapse-chat-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1em;
+  font-size: 0.9em;
+}
+
+.synapse-chat-markdown th,
+.synapse-chat-markdown td {
+  padding: 0.5em 0.75em;
+  border: 1px solid var(--synapse-chat-border);
+  text-align: left;
+}
+
+.synapse-chat-markdown th {
+  font-weight: 600;
+  background-color: var(--synapse-chat-code-bg);
+}
+
+.synapse-chat-markdown tr:nth-child(even) td {
+  background-color: color-mix(in srgb, var(--synapse-chat-code-bg) 50%, transparent);
+}
+
+/* Code */
+.synapse-chat-markdown code {
+  padding: 0.15em 0.35em;
+  border-radius: 0.25em;
+  background-color: var(--synapse-chat-code-bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875em;
+}
+
+.synapse-chat-markdown pre {
+  margin-top: 0;
+  margin-bottom: 0.75em;
+  padding: 0.75em 1em;
+  overflow-x: auto;
+  border-radius: 0.375em;
+  background-color: var(--synapse-chat-code-bg);
+  border: 1px solid var(--synapse-chat-border);
+}
+
+.synapse-chat-markdown pre code {
+  padding: 0;
+  background-color: transparent;
+  border-radius: 0;
+  font-size: 0.875em;
+}
+
+/* Blockquotes */
+.synapse-chat-markdown blockquote {
+  margin: 0 0 0.75em;
+  padding: 0.25em 0.75em;
+  border-left: 3px solid var(--synapse-chat-border);
+  color: var(--synapse-chat-muted);
+}
+
+.synapse-chat-markdown blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Horizontal rule */
+.synapse-chat-markdown hr {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid var(--synapse-chat-border);
+}
+
+/* Links */
+.synapse-chat-markdown a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Task lists (remark-gfm) */
+.synapse-chat-markdown input[type="checkbox"] {
+  margin-right: 0.4em;
+  vertical-align: middle;
+}

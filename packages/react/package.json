@@ -23,6 +23,9 @@
     "./storage": {
       "types": "./dist/storage/index.d.ts",
       "default": "./dist/storage/index.js"
+    },
+    "./styles": {
+      "default": "./dist/styles/chat-message.css"
     }
   },
   "files": [
@@ -32,9 +35,9 @@
     "!src/**/*.test.tsx",
     "!src/test-setup.ts"
   ],
-  "sideEffects": false,
+  "sideEffects": ["**/*.css"],
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && mkdir -p dist/styles && cp src/styles/chat-message.css dist/styles/",
     "clean": "rm -rf dist *.tsbuildinfo",
     "typecheck": "tsc -b",
     "test": "vitest run"
