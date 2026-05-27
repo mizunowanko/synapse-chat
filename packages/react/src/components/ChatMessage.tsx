@@ -14,6 +14,7 @@ import { cn, isSafeUrl } from "../lib/utils.js";
 import { formatTime } from "../lib/format-time.js";
 import { remarkIssueLink } from "../lib/remark-issue-link.js";
 import { CompactionBadge } from "./CompactionBadge.js";
+import { CollapsibleOutput } from "./CollapsibleOutput.js";
 
 /** Convert base64 ImageAttachments to object URLs, revoking on cleanup. */
 function useImageObjectUrls(images: ImageAttachment[] | undefined): string[] {
@@ -78,6 +79,12 @@ export interface ChatMessageProps {
   renderMeta?: (message: StreamMessage) => ReactNode | null;
   /** Override react-markdown's URL sanitizer. Use this to allow custom URL schemes (e.g. `familia://`). */
   urlTransform?: (url: string) => string;
+  /**
+   * When set, `tool_result` content exceeding this many lines is wrapped in
+   * `CollapsibleOutput` with show-more / show-less toggle.
+   * When omitted, the existing pre block renders without truncation.
+   */
+  maxOutputLines?: number;
 }
 
 export const ChatMessage = memo(function ChatMessage({
@@ -87,6 +94,7 @@ export const ChatMessage = memo(function ChatMessage({
   renderSystem,
   renderMeta,
   urlTransform = defaultUrlTransform,
+  maxOutputLines,
 }: ChatMessageProps) {
   const [toolExpanded, setToolExpanded] = useState(false);
   const [resultExpanded, setResultExpanded] = useState(false);
@@ -140,24 +148,33 @@ export const ChatMessage = memo(function ChatMessage({
   if (message.type === "tool_result") {
     return (
       <div className="flex w-full justify-start">
-        <button
-          type="button"
+        <div
           className={cn(
-            "max-w-[90%] rounded border-l-2 border-emerald-500/30 px-3 py-1.5 cursor-pointer select-none text-left",
-            "hover:bg-muted/30 transition-colors",
+            "max-w-[90%] rounded border-l-2 border-emerald-500/30 px-3 py-1.5 text-left",
           )}
-          onClick={() => setResultExpanded(!resultExpanded)}
         >
-          <div className="flex items-center gap-1.5 text-xs font-mono text-emerald-400/70">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 text-xs font-mono text-emerald-400/70 cursor-pointer select-none hover:text-emerald-400 transition-colors w-full text-left"
+            onClick={() => setResultExpanded(!resultExpanded)}
+          >
             <span className="text-[10px]">{resultExpanded ? "▼" : "▶"}</span>
             <span>result</span>
-          </div>
+          </button>
           {resultExpanded && message.content && (
-            <pre className="whitespace-pre-wrap break-words text-xs text-muted-foreground/80 mt-1.5 font-mono leading-relaxed max-h-60 overflow-y-auto">
-              {message.content}
-            </pre>
+            maxOutputLines !== undefined ? (
+              <CollapsibleOutput
+                content={message.content}
+                maxLines={maxOutputLines}
+                className="mt-1.5"
+              />
+            ) : (
+              <pre className="whitespace-pre-wrap break-words text-xs text-muted-foreground/80 mt-1.5 font-mono leading-relaxed max-h-60 overflow-y-auto">
+                {message.content}
+              </pre>
+            )
           )}
-        </button>
+        </div>
       </div>
     );
   }

@@ -4,6 +4,10 @@ export {
   type ChatMessageProps,
 } from "./components/ChatMessage.js";
 export {
+  CollapsibleOutput,
+  type CollapsibleOutputProps,
+} from "./components/CollapsibleOutput.js";
+export {
   CompactionBadge,
   type CompactionBadgeProps,
 } from "./components/CompactionBadge.js";
