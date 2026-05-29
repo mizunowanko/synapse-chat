@@ -45,6 +45,7 @@ export interface ProcessManagerLike {
     extraPrompt?: string,
     skill?: string,
     extraEnv?: Record<string, string>,
+    model?: string,
   ): void;
 
   /**
@@ -57,6 +58,7 @@ export interface ProcessManagerLike {
     prompt: string,
     type: "investigate" | "modify",
     extraEnv?: Record<string, string>,
+    model?: string,
   ): void;
 
   /**
@@ -68,6 +70,7 @@ export interface ProcessManagerLike {
     additionalDirs: string[],
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
+    model?: string,
   ): void;
 
   /**
@@ -80,6 +83,7 @@ export interface ProcessManagerLike {
     additionalDirs: string[],
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
+    model?: string,
   ): void;
 
   /**
@@ -93,6 +97,7 @@ export interface ProcessManagerLike {
     extraEnv?: Record<string, string>,
     appendSystemPrompt?: string,
     logFileName?: string,
+    model?: string,
   ): void;
 
   /** Send a text message (optionally with images) to a running commander's stdin. */

@@ -16,6 +16,7 @@ export type IpcSortieCommand = {
   extraPrompt?: string | undefined;
   skill?: string | undefined;
   extraEnv?: Record<string, string> | undefined;
+  model?: string | undefined;
 };
 
 export type IpcDispatchSortieCommand = {
@@ -25,6 +26,7 @@ export type IpcDispatchSortieCommand = {
   prompt: string;
   dispatchType: "investigate" | "modify";
   extraEnv?: Record<string, string> | undefined;
+  model?: string | undefined;
 };
 
 export type IpcLaunchCommanderCommand = {
@@ -34,6 +36,7 @@ export type IpcLaunchCommanderCommand = {
   additionalDirs: string[];
   systemPrompt?: string | undefined;
   extraEnv?: Record<string, string> | undefined;
+  model?: string | undefined;
 };
 
 export type IpcResumeCommanderCommand = {
@@ -44,6 +47,7 @@ export type IpcResumeCommanderCommand = {
   additionalDirs: string[];
   systemPrompt?: string | undefined;
   extraEnv?: Record<string, string> | undefined;
+  model?: string | undefined;
 };
 
 export type IpcResumeSessionCommand = {
@@ -55,6 +59,7 @@ export type IpcResumeSessionCommand = {
   extraEnv?: Record<string, string> | undefined;
   appendSystemPrompt?: string | undefined;
   logFileName?: string | undefined;
+  model?: string | undefined;
 };
 
 export type IpcSendMessageCommand = {

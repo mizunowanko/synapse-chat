@@ -60,6 +60,7 @@ export class IpcProcessManager
     extraPrompt?: string,
     skill?: string,
     extraEnv?: Record<string, string>,
+    model?: string,
   ): void {
     this.sendCommand({
       type: "sortie",
@@ -69,6 +70,7 @@ export class IpcProcessManager
       extraPrompt,
       skill,
       extraEnv,
+      model,
     });
   }
 
@@ -78,6 +80,7 @@ export class IpcProcessManager
     prompt: string,
     type: "investigate" | "modify",
     extraEnv?: Record<string, string>,
+    model?: string,
   ): void {
     this.sendCommand({
       type: "dispatch-sortie",
@@ -86,6 +89,7 @@ export class IpcProcessManager
       prompt,
       dispatchType: type,
       extraEnv,
+      model,
     });
   }
 
@@ -95,6 +99,7 @@ export class IpcProcessManager
     additionalDirs: string[],
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
+    model?: string,
   ): void {
     this.sendCommand({
       type: "launch-commander",
@@ -103,6 +108,7 @@ export class IpcProcessManager
       additionalDirs,
       systemPrompt,
       extraEnv,
+      model,
     });
   }
 
@@ -113,6 +119,7 @@ export class IpcProcessManager
     additionalDirs: string[],
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
+    model?: string,
   ): void {
     this.sendCommand({
       type: "resume-commander",
@@ -122,6 +129,7 @@ export class IpcProcessManager
       additionalDirs,
       systemPrompt,
       extraEnv,
+      model,
     });
   }
 
@@ -133,6 +141,7 @@ export class IpcProcessManager
     extraEnv?: Record<string, string>,
     appendSystemPrompt?: string,
     logFileName?: string,
+    model?: string,
   ): void {
     this.sendCommand({
       type: "resume-session",
@@ -143,6 +152,7 @@ export class IpcProcessManager
       extraEnv,
       appendSystemPrompt,
       logFileName,
+      model,
     });
   }
 
