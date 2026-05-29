@@ -24,6 +24,8 @@ export interface SessionOptions {
    * Leave unset for interactive chat sessions where a human should approve.
    */
   autoApprove?: boolean;
+  /** Override the AI model used for this session (e.g. "claude-opus-4-7-20251001"). */
+  model?: string;
 }
 
 /**

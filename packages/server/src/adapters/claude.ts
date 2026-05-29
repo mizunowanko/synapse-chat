@@ -46,6 +46,9 @@ export function buildClaudeArgs(options: SessionOptions): string[] {
   if (options.autoApprove) {
     args.push("--dangerously-skip-permissions");
   }
+  if (options.model) {
+    args.push("--model", options.model);
+  }
 
   return args;
 }

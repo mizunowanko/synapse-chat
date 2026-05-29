@@ -45,6 +45,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
     extraPrompt?: string,
     skill?: string,
     extraEnv?: Record<string, string>,
+    model?: string,
   ): ChildProcess {
     const skillCmd = skill ?? "/implement";
     const args = [
@@ -62,6 +63,9 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
 
     if (extraPrompt) {
       args.push("--append-system-prompt", extraPrompt);
+    }
+    if (model) {
+      args.push("--model", model);
     }
 
     const proc = spawn(CLI_PATH, args, {
@@ -86,6 +90,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
     prompt: string,
     type: "investigate" | "modify",
     extraEnv?: Record<string, string>,
+    model?: string,
   ): ChildProcess {
     const allowedTools =
       type === "investigate"
@@ -104,6 +109,9 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
       "100",
       "--verbose",
     ];
+    if (model) {
+      args.push("--model", model);
+    }
 
     const proc = spawn(CLI_PATH, args, {
       cwd,
@@ -133,6 +141,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
     additionalDirs: string[],
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
+    model?: string,
   ): ChildProcess {
     const args = [
       "-p",
@@ -146,6 +155,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
       COMMANDER_ALLOWED_TOOLS,
       ...(systemPrompt ? ["--append-system-prompt", systemPrompt] : []),
       ...additionalDirs.flatMap((d) => ["--add-dir", d]),
+      ...(model ? ["--model", model] : []),
     ];
 
     const proc = spawn(CLI_PATH, args, {
@@ -222,6 +232,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
     additionalDirs: string[],
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
+    model?: string,
   ): ChildProcess {
     const args = [
       "--resume",
@@ -235,6 +246,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
       COMMANDER_ALLOWED_TOOLS,
       ...(systemPrompt ? ["--append-system-prompt", systemPrompt] : []),
       ...additionalDirs.flatMap((d) => ["--add-dir", d]),
+      ...(model ? ["--model", model] : []),
     ];
 
     const proc = spawn(CLI_PATH, args, {
@@ -273,6 +285,8 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
       sessionOptions.disallowedTools = options.disallowedTools;
     if (options.autoApprove !== undefined)
       sessionOptions.autoApprove = options.autoApprove;
+    if (options.model !== undefined)
+      sessionOptions.model = options.model;
     const args = adapter.buildArgs(sessionOptions);
 
     const proc = spawn(adapter.command, args, {
@@ -296,6 +310,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
     extraEnv?: Record<string, string>,
     appendSystemPrompt?: string,
     logFileName?: string,
+    model?: string,
   ): ChildProcess {
     const args = [
       "--resume",
@@ -312,6 +327,9 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
 
     if (appendSystemPrompt) {
       args.push("--append-system-prompt", appendSystemPrompt);
+    }
+    if (model) {
+      args.push("--model", model);
     }
 
     const proc = spawn(CLI_PATH, args, {

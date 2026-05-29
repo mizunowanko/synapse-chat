@@ -57,6 +57,7 @@ process.on("message", (msg: ProcessManagerWorkerMessage) => {
         msg.extraPrompt,
         msg.skill,
         msg.extraEnv,
+        msg.model,
       );
       break;
 
@@ -67,6 +68,7 @@ process.on("message", (msg: ProcessManagerWorkerMessage) => {
         msg.prompt,
         msg.dispatchType,
         msg.extraEnv,
+        msg.model,
       );
       break;
 
@@ -77,6 +79,7 @@ process.on("message", (msg: ProcessManagerWorkerMessage) => {
         msg.additionalDirs,
         msg.systemPrompt,
         msg.extraEnv,
+        msg.model,
       );
       break;
 
@@ -88,6 +91,7 @@ process.on("message", (msg: ProcessManagerWorkerMessage) => {
         msg.additionalDirs,
         msg.systemPrompt,
         msg.extraEnv,
+        msg.model,
       );
       break;
 
@@ -100,6 +104,7 @@ process.on("message", (msg: ProcessManagerWorkerMessage) => {
         msg.extraEnv,
         msg.appendSystemPrompt,
         msg.logFileName,
+        msg.model,
       );
       break;
 
