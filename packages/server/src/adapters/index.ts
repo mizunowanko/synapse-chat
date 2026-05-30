@@ -17,3 +17,10 @@ export {
   buildGemmaArgs,
   parseGemmaOutput,
 } from "./gemma.js";
+
+export {
+  runOllama,
+  parseRunnerArgs,
+  type OllamaRunnerOptions,
+  type ParsedRunnerArgs,
+} from "./ollama-runner.js";

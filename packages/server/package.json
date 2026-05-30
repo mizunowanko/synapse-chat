@@ -25,9 +25,13 @@
       "default": "./dist/supervisor/index.js"
     }
   },
+  "bin": {
+    "synapse-ollama-runner": "./bin/ollama-runner.mjs"
+  },
   "files": [
     "dist",
     "src",
+    "bin",
     "!src/**/*.test.ts",
     "!src/**/test-fixtures/**"
   ],

@@ -15,6 +15,7 @@ import { formatTime } from "../lib/format-time.js";
 import { remarkIssueLink } from "../lib/remark-issue-link.js";
 import { CompactionBadge } from "./CompactionBadge.js";
 import { CollapsibleOutput } from "./CollapsibleOutput.js";
+import { CollapsibleThinking } from "./CollapsibleThinking.js";
 
 /** Convert base64 ImageAttachments to object URLs, revoking on cleanup. */
 function useImageObjectUrls(images: ImageAttachment[] | undefined): string[] {
@@ -116,6 +117,18 @@ export const ChatMessage = memo(function ChatMessage({
   const isUser = message.type === "user";
   const isError = message.type === "error";
   const isSystem = message.type === "system";
+
+  if (message.type === "assistant" && message.subtype === "thinking") {
+    return (
+      <div className="flex w-full justify-start">
+        <CollapsibleThinking
+          content={message.content ?? ""}
+          isComplete={false}
+          className="max-w-[90%]"
+        />
+      </div>
+    );
+  }
 
   if (message.type === "tool_use") {
     const hasContent =
