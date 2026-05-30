@@ -8,6 +8,14 @@ export {
   type CollapsibleOutputProps,
 } from "./components/CollapsibleOutput.js";
 export {
+  CollapsibleThinking,
+  type CollapsibleThinkingProps,
+} from "./components/CollapsibleThinking.js";
+export {
+  ThinkingMessage,
+  type ThinkingMessageProps,
+} from "./components/ThinkingMessage.js";
+export {
   CompactionBadge,
   type CompactionBadgeProps,
 } from "./components/CompactionBadge.js";
@@ -53,9 +61,12 @@ export {
 export {
   groupToolMessages,
   isToolGroup,
+  isThinkingGroup,
   type DisplayItem,
   type ToolUseGroupItem,
+  type ThinkingGroupItem,
 } from "./lib/group-tool-messages.js";
+export { groupThinkingMessages } from "./lib/group-thinking-messages.js";
 export {
   createMessageFilter,
   type CreateMessageFilterOptions,

@@ -18,6 +18,20 @@ describe("<ChatMessage />", () => {
     expect(bold.tagName).toBe("STRONG");
   });
 
+  it("renders a thinking-subtyped assistant message via the collapsible block", () => {
+    render(
+      <ChatMessage
+        message={{
+          type: "assistant",
+          subtype: "thinking",
+          content: "scratchpad",
+        }}
+      />,
+    );
+    expect(screen.getByText("scratchpad")).toBeInTheDocument();
+    expect(screen.getByText(/Thinking\.\.\./)).toBeInTheDocument();
+  });
+
   it("returns null for system messages without a renderer", () => {
     const { container } = render(
       <ChatMessage message={{ type: "system", subtype: "unknown", content: "x" }} />,

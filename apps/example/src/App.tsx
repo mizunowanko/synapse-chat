@@ -2,8 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChatMessage,
   SessionInput,
+  ThinkingMessage,
   ToolUseGroup,
+  groupThinkingMessages,
   groupToolMessages,
+  isThinkingGroup,
   isToolGroup,
   useWebSocket,
   type ImageAttachment,
@@ -106,7 +109,10 @@ export function App() {
     setStatusBanner("Session reset.");
   }, [send]);
 
-  const groups = useMemo(() => groupToolMessages(messages), [messages]);
+  const groups = useMemo(
+    () => groupThinkingMessages(groupToolMessages(messages)),
+    [messages],
+  );
 
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
@@ -155,6 +161,9 @@ export function App() {
           {groups.map((item, i) => {
             if (isToolGroup(item)) {
               return <ToolUseGroup key={`tools-${i}`} group={item} />;
+            }
+            if (isThinkingGroup(item)) {
+              return <ThinkingMessage key={`think-${i}`} group={item} />;
             }
             return (
               <ChatMessage

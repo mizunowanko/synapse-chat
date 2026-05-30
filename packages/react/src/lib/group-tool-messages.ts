@@ -6,12 +6,29 @@ export interface ToolUseGroupItem {
   timestamp?: number;
 }
 
+export interface ThinkingGroupItem {
+  kind: "thinking-group";
+  /** Aggregated thinking content of all consecutive thinking chunks. */
+  content: string;
+  /**
+   * `true` once a non-thinking message follows the group in the stream.
+   * Consumers should auto-collapse the disclosure block in this state.
+   */
+  isComplete: boolean;
+  timestamp?: number;
+}
+
 export type DisplayItem =
   | (StreamMessage & { repeatCount?: number })
-  | ToolUseGroupItem;
+  | ToolUseGroupItem
+  | ThinkingGroupItem;
 
 export function isToolGroup(item: DisplayItem): item is ToolUseGroupItem {
   return "kind" in item && item.kind === "tool-group";
+}
+
+export function isThinkingGroup(item: DisplayItem): item is ThinkingGroupItem {
+  return "kind" in item && item.kind === "thinking-group";
 }
 
 /**
