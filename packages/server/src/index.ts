@@ -58,4 +58,8 @@ export {
   gemmaAdapter,
   buildGemmaArgs,
   parseGemmaOutput,
+  runOllama,
+  parseRunnerArgs,
+  type OllamaRunnerOptions,
+  type ParsedRunnerArgs,
 } from "./adapters/index.js";

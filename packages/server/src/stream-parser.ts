@@ -113,8 +113,50 @@ function parseStreamMessageInner(
 ): StreamMessage | null {
   switch (type) {
     case "assistant": {
-      const msg = raw.message as { content?: ContentBlock[] } | undefined;
-      const blocks = msg?.content ?? [];
+      const subtype = raw.subtype as string | undefined;
+      if (subtype === "thinking") {
+        const text =
+          (raw.content as string | undefined) ??
+          (raw.text as string | undefined) ??
+          (raw.thinking as string | undefined);
+        if (!text) return null;
+        return {
+          type: "assistant",
+          subtype: "thinking",
+          content: text,
+        };
+      }
+
+      // Ollama-style chunks that emit `thinking` and `content` siblings without
+      // a Claude-style content-block array. Map them to subtype:"thinking" /
+      // plain assistant messages so downstream UIs can group them.
+      if (typeof raw.thinking === "string" && raw.thinking.length > 0) {
+        return {
+          type: "assistant",
+          subtype: "thinking",
+          content: raw.thinking as string,
+        };
+      }
+
+      const msg = raw.message as { content?: ContentBlock[] | string } | undefined;
+      if (typeof msg?.content === "string" && msg.content.length > 0) {
+        return {
+          type: "assistant",
+          content: msg.content,
+        };
+      }
+      const blocks = (Array.isArray(msg?.content) ? msg.content : []) as ContentBlock[];
+
+      const thinkingTexts = blocks
+        .filter((b) => b.type === "thinking" && b.text)
+        .map((b) => b.text as string);
+      if (thinkingTexts.length > 0) {
+        return {
+          type: "assistant",
+          subtype: "thinking",
+          content: thinkingTexts.join("\n"),
+        };
+      }
 
       const texts = blocks
         .filter((b) => b.type === "text" && b.text)

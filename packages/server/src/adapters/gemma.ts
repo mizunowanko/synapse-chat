@@ -11,6 +11,11 @@ export function buildGemmaArgs(options: SessionOptions): string[] {
   if (options.prompt) {
     args.push("-p", options.prompt);
   }
+  if (options.stream === true) {
+    args.push("--stream");
+  } else if (options.stream === false) {
+    args.push("--no-stream");
+  }
   return args;
 }
 

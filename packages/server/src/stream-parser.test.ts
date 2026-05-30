@@ -271,6 +271,60 @@ describe("parseStreamMessage", () => {
         timestamp: expect.any(Number),
       });
     });
+
+    it("returns subtype: thinking when an Ollama runner emits a thinking chunk", () => {
+      const result = parseStreamMessage({
+        type: "assistant",
+        subtype: "thinking",
+        content: "Considering options",
+      });
+      expect(result).toEqual({
+        type: "assistant",
+        subtype: "thinking",
+        content: "Considering options",
+        timestamp: expect.any(Number),
+      });
+    });
+
+    it("maps a raw Ollama chunk with sibling `thinking` field to subtype: thinking", () => {
+      const result = parseStreamMessage({
+        type: "assistant",
+        thinking: "weighing tradeoffs",
+      });
+      expect(result).toEqual({
+        type: "assistant",
+        subtype: "thinking",
+        content: "weighing tradeoffs",
+        timestamp: expect.any(Number),
+      });
+    });
+
+    it("maps thinking-typed content block to subtype: thinking", () => {
+      const result = parseStreamMessage({
+        type: "assistant",
+        message: {
+          content: [{ type: "thinking", text: "step 1" }],
+        },
+      });
+      expect(result).toEqual({
+        type: "assistant",
+        subtype: "thinking",
+        content: "step 1",
+        timestamp: expect.any(Number),
+      });
+    });
+
+    it("treats Ollama-style message.content string as a plain assistant message", () => {
+      const result = parseStreamMessage({
+        type: "assistant",
+        message: { role: "assistant", content: "Hello world" },
+      });
+      expect(result).toEqual({
+        type: "assistant",
+        content: "Hello world",
+        timestamp: expect.any(Number),
+      });
+    });
   });
 
   // === system ===

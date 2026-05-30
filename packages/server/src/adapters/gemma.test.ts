@@ -57,6 +57,26 @@ describe("buildGemmaArgs", () => {
     });
     expect(args).toEqual(["-p", "hi"]);
   });
+
+  it("adds --stream when stream: true", () => {
+    expect(buildGemmaArgs({ prompt: "hi", stream: true })).toEqual([
+      "-p",
+      "hi",
+      "--stream",
+    ]);
+  });
+
+  it("adds --no-stream when stream: false", () => {
+    expect(buildGemmaArgs({ prompt: "hi", stream: false })).toEqual([
+      "-p",
+      "hi",
+      "--no-stream",
+    ]);
+  });
+
+  it("omits stream flag when option is undefined", () => {
+    expect(buildGemmaArgs({ prompt: "hi" })).toEqual(["-p", "hi"]);
+  });
 });
 
 describe("parseGemmaOutput", () => {
@@ -103,6 +123,42 @@ describe("parseGemmaOutput", () => {
   it("returns null for unknown type", () => {
     const line = JSON.stringify({ type: "unknown_type", data: "foo" });
     expect(parseGemmaOutput(line)).toBeNull();
+  });
+
+  it("parses Ollama-style streaming chunk with message.content string", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: { role: "assistant", content: "Hi there" },
+    });
+    expect(parseGemmaOutput(line)).toMatchObject({
+      type: "assistant",
+      content: "Hi there",
+    });
+  });
+
+  it("parses thinking chunk emitted by the Ollama runner", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      subtype: "thinking",
+      content: "Let me reason about this",
+    });
+    expect(parseGemmaOutput(line)).toMatchObject({
+      type: "assistant",
+      subtype: "thinking",
+      content: "Let me reason about this",
+    });
+  });
+
+  it("parses raw Ollama chunk where thinking is a sibling field", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      thinking: "Considering options",
+    });
+    expect(parseGemmaOutput(line)).toMatchObject({
+      type: "assistant",
+      subtype: "thinking",
+      content: "Considering options",
+    });
   });
 });
 
