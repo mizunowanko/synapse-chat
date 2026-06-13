@@ -295,7 +295,7 @@ describe("useChat — optimistic send (online)", () => {
   it("includes images on the optimistic message and the wire payload", () => {
     const { result } = renderHook(() => useChat({ wsOptions, decode }));
     const images = [
-      { base64: "abc", mediaType: "image/png" as const },
+      { kind: "image" as const, base64: "abc", mediaType: "image/png" as const },
     ];
 
     act(() => {

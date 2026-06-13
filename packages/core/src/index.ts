@@ -1,4 +1,6 @@
 export type {
+  Attachment,
+  AttachmentImageMediaType,
   ImageAttachment,
   StreamMessage,
   StreamMessageBase,
