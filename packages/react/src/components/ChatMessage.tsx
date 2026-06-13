@@ -99,7 +99,9 @@ export const ChatMessage = memo(function ChatMessage({
 }: ChatMessageProps) {
   const [toolExpanded, setToolExpanded] = useState(false);
   const [resultExpanded, setResultExpanded] = useState(false);
-  const imageUrls = useImageObjectUrls(message.images);
+  const imageUrls = useImageObjectUrls(
+    "images" in message ? message.images : undefined,
+  );
 
   const remarkPlugins: PluggableList = useMemo(
     () => [
@@ -229,11 +231,6 @@ export const ChatMessage = memo(function ChatMessage({
               : "bg-card text-card-foreground",
         )}
       >
-        {message.tool && (
-          <span className="text-xs font-mono text-muted-foreground block mb-1">
-            [{message.tool}]
-          </span>
-        )}
         {isUser && imageUrls.length > 0 && (
           <div className="flex gap-1.5 flex-wrap mb-1.5">
             {imageUrls.map((url, i) => (

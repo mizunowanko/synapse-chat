@@ -170,7 +170,7 @@ export function App() {
                 key={`msg-${i}`}
                 message={item}
                 renderSystem={(m) =>
-                  m.subtype === "status" ? (
+                  m.type === "system" && m.subtype === "status" ? (
                     <div className="text-xs italic text-muted-foreground">
                       {m.content}
                     </div>

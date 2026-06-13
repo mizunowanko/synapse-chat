@@ -1,3 +1,4 @@
+import { isThinkingMessage } from "@synapse-chat/core";
 import {
   isThinkingGroup,
   isToolGroup,
@@ -39,11 +40,10 @@ export function groupThinkingMessages(items: DisplayItem[]): DisplayItem[] {
     if (
       !isToolGroup(item) &&
       !isThinkingGroup(item) &&
-      item.type === "assistant" &&
-      item.subtype === "thinking"
+      isThinkingMessage(item)
     ) {
       if (buffer.length === 0) bufferTimestamp = item.timestamp;
-      buffer.push(item.content ?? "");
+      buffer.push(item.content);
       continue;
     }
     flush(true);

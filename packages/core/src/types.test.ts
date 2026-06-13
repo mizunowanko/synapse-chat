@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { assertNever, isAssistantBody, isThinkingMessage } from "./index.js";
 import type {
   CLIAdapter,
   ImageAttachment,
@@ -14,6 +15,38 @@ describe("@synapse-chat/core type surface", () => {
       timestamp: 1_700_000_000_000,
     };
     expect(msg.type).toBe("assistant");
+  });
+
+  it("discriminates a plain assistant body delta from a thinking chunk", () => {
+    const body: StreamMessage = { type: "assistant", content: "hi" };
+    const thinking: StreamMessage = {
+      type: "assistant",
+      subtype: "thinking",
+      content: "reasoning",
+    };
+
+    expect(isAssistantBody(body)).toBe(true);
+    expect(isThinkingMessage(body)).toBe(false);
+    expect(isAssistantBody(thinking)).toBe(false);
+    expect(isThinkingMessage(thinking)).toBe(true);
+  });
+
+  it("narrows result usage through the discriminant", () => {
+    const msg: StreamMessage = {
+      type: "result",
+      content: "done",
+      usage: { inputTokens: 10, outputTokens: 5 },
+    };
+    // Exhaustive branch: only `result` carries `usage`.
+    if (msg.type === "result") {
+      expect(msg.usage?.inputTokens).toBe(10);
+    }
+  });
+
+  it("assertNever throws when reached at runtime", () => {
+    expect(() => assertNever("unexpected" as never)).toThrow(
+      /Unhandled StreamMessage variant/,
+    );
   });
 
   it("ImageAttachment narrows media type", () => {
