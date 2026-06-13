@@ -78,6 +78,8 @@ export { cn, isSafeUrl } from "./lib/utils.js";
 
 // Re-export core types that chat consumers will inevitably need.
 export type {
+  Attachment,
+  AttachmentImageMediaType,
   StreamMessage,
   StreamMessageType,
   ImageAttachment,

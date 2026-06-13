@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assertNever, isAssistantBody, isThinkingMessage } from "./index.js";
 import type {
+  Attachment,
   CLIAdapter,
   ImageAttachment,
   SessionOptions,
@@ -50,8 +51,23 @@ describe("@synapse-chat/core type surface", () => {
   });
 
   it("ImageAttachment narrows media type", () => {
-    const img: ImageAttachment = { base64: "AAAA", mediaType: "image/png" };
+    const img: ImageAttachment = {
+      kind: "image",
+      base64: "AAAA",
+      mediaType: "image/png",
+    };
     expect(img.mediaType).toBe("image/png");
+  });
+
+  it("Attachment discriminates image vs text on `kind`", () => {
+    const attachments: Attachment[] = [
+      { kind: "image", base64: "AAAA", mediaType: "image/png", name: "a.png" },
+      { kind: "text", content: "hello", mimeType: "text/plain", name: "n.txt" },
+    ];
+    const summary = attachments.map((a) =>
+      a.kind === "image" ? a.mediaType : a.mimeType,
+    );
+    expect(summary).toEqual(["image/png", "text/plain"]);
   });
 
   it("CLIAdapter can be satisfied by a minimal implementation", () => {

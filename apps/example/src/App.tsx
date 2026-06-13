@@ -9,6 +9,7 @@ import {
   isThinkingGroup,
   isToolGroup,
   useWebSocket,
+  type Attachment,
   type ImageAttachment,
   type StreamMessage,
   type WSClientOptions,
@@ -81,9 +82,14 @@ export function App() {
   }, [client]);
 
   const handleSend = useCallback(
-    (text: string, images?: ImageAttachment[]) => {
+    (text: string, attachments?: Attachment[]) => {
       const trimmed = text.trim();
-      if (!trimmed && (!images || images.length === 0)) return;
+      if (!trimmed && (!attachments || attachments.length === 0)) return;
+
+      // This demo only renders/forwards image attachments.
+      const images = attachments?.filter(
+        (a): a is ImageAttachment => a.kind === "image",
+      );
 
       // Optimistic local echo: render the user's own message immediately.
       // The server may also echo a `user` StreamMessage; either is fine —

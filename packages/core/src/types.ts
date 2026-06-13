@@ -26,11 +26,35 @@ export type StreamMessageType =
   | "history"
   | "question";
 
-/** Base64-encoded image attached to a user message. */
-export interface ImageAttachment {
-  base64: string;
-  mediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
-}
+/** Media types accepted for an inline image attachment. */
+export type AttachmentImageMediaType =
+  | "image/png"
+  | "image/jpeg"
+  | "image/gif"
+  | "image/webp";
+
+/**
+ * Unified attachment model (ADR-0018 §4). The single source of truth for a file
+ * the user attaches to a message: the same type flows UI → WS → server → CLI, so
+ * there is no per-layer redefinition to drift out of sync. Image variants carry
+ * the raw base64 bytes; text variants carry the decoded UTF-8 content.
+ */
+export type Attachment =
+  | {
+      kind: "image";
+      base64: string;
+      mediaType: AttachmentImageMediaType;
+      name?: string;
+    }
+  | { kind: "text"; content: string; mimeType: string; name?: string };
+
+/**
+ * @deprecated Use {@link Attachment} (the `kind: "image"` variant). Retained as
+ * the image-only narrow for the render paths that only ever deal with images
+ * (e.g. {@link AssistantMessage.images}). Derived from {@link Attachment}, so it
+ * is not a separate definition.
+ */
+export type ImageAttachment = Extract<Attachment, { kind: "image" }>;
 
 /**
  * Normalized token usage attached to a `result` {@link StreamMessage}.

@@ -9,7 +9,7 @@ import {
   type ChangeEvent,
 } from "react";
 import { Send, X, ImageIcon } from "lucide-react";
-import type { ImageAttachment } from "@synapse-chat/core";
+import type { Attachment, AttachmentImageMediaType } from "@synapse-chat/core";
 import { cn } from "../lib/utils.js";
 
 const ACCEPTED_TYPES = new Set<string>([
@@ -27,16 +27,46 @@ const ACCEPTED_TYPES = new Set<string>([
   "text/x-yaml",
 ]);
 
-type ImageMediaType = ImageAttachment["mediaType"];
-
 const DEFAULT_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const DEFAULT_MAX_IMAGES = 10;
 const MAX_ROWS = 6;
 const LINE_HEIGHT = 20;
 const PADDING_Y = 8;
 
-interface PreviewAttachment extends ImageAttachment {
+/**
+ * A file the user has staged but not yet sent. Holds the raw base64 bytes and
+ * the original MIME (which may be an image, text, or document type), plus an
+ * object URL for the thumbnail. Converted to a typed {@link Attachment} on send.
+ */
+interface PreviewAttachment {
+  base64: string;
+  mediaType: string;
+  name: string;
   objectUrl: string;
+}
+
+/** Decode a base64 payload as UTF-8 text (used for non-image attachments). */
+function decodeBase64Utf8(base64: string): string {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+/** Convert a staged preview into the typed wire {@link Attachment}. */
+function toAttachment(preview: PreviewAttachment): Attachment {
+  if (preview.mediaType.startsWith("image/")) {
+    return {
+      kind: "image",
+      base64: preview.base64,
+      mediaType: preview.mediaType as AttachmentImageMediaType,
+      name: preview.name,
+    };
+  }
+  return {
+    kind: "text",
+    content: decodeBase64Utf8(preview.base64),
+    mimeType: preview.mediaType,
+    name: preview.name,
+  };
 }
 
 function fileToAttachment(file: File): Promise<PreviewAttachment> {
@@ -48,7 +78,8 @@ function fileToAttachment(file: File): Promise<PreviewAttachment> {
       const objectUrl = URL.createObjectURL(file);
       resolve({
         base64,
-        mediaType: file.type as ImageMediaType,
+        mediaType: file.type,
+        name: file.name,
         objectUrl,
       });
     };
@@ -64,10 +95,11 @@ export interface SessionInputProps {
   onChange: (value: string) => void;
   /**
    * Called when the user hits Enter or the send button. Receives the trimmed
-   * text and optional image attachments. The component clears its image
-   * buffer on send; the caller is responsible for clearing `value`.
+   * text and optional typed attachments (image or text). The component clears
+   * its attachment buffer on send; the caller is responsible for clearing
+   * `value`.
    */
-  onSend: (message: string, images?: ImageAttachment[]) => void;
+  onSend: (message: string, attachments?: Attachment[]) => void;
   disabled?: boolean;
   placeholder?: string;
   /** Maximum number of images the user can attach in a single send. */
@@ -150,10 +182,8 @@ export function SessionInput({
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
     if (!trimmed && images.length === 0) return;
-    const toSend: ImageAttachment[] | undefined =
-      images.length > 0
-        ? images.map(({ base64, mediaType }) => ({ base64, mediaType }))
-        : undefined;
+    const toSend: Attachment[] | undefined =
+      images.length > 0 ? images.map(toAttachment) : undefined;
     onSend(trimmed, toSend);
     for (const img of images) URL.revokeObjectURL(img.objectUrl);
     setImages([]);
