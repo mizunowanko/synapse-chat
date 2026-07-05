@@ -203,13 +203,18 @@ function parseStreamMessageInner(
 
     case "system": {
       const subtype = raw.subtype as string | undefined;
-      // Drop init/hook/task-progress notifications — they are internal CLI
-      // bookkeeping that clutters downstream chat panels.
+      // Drop init/hook/task-progress/thinking-token notifications — they are
+      // internal CLI bookkeeping that clutters downstream chat panels.
+      // `thinking_tokens` is an extended-thinking progress event Claude CLI
+      // emits every ~1s; the token total is also carried by the `result`
+      // message's `usage` block, so dropping the progress events does not
+      // affect cost accounting.
       if (
         subtype === "init" ||
         subtype?.startsWith("hook") ||
         subtype === "task_started" ||
-        subtype === "task_progress"
+        subtype === "task_progress" ||
+        subtype === "thinking_tokens"
       ) {
         return null;
       }
