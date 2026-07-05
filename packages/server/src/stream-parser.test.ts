@@ -362,6 +362,16 @@ describe("parseStreamMessage", () => {
       expect(result).toBeNull();
     });
 
+    it("returns null for thinking_tokens subtype", () => {
+      const result = parseStreamMessage({
+        type: "system",
+        subtype: "thinking_tokens",
+        estimated_tokens: 50,
+        estimated_tokens_delta: 50,
+      });
+      expect(result).toBeNull();
+    });
+
     it("returns compact-status for compacting status", () => {
       const result = parseStreamMessage({
         type: "system",
