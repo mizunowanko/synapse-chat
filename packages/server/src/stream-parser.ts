@@ -95,11 +95,30 @@ export function toTokenUsage(usage: ResultUsage): TokenUsage {
  *
  * Returns null for messages that should be silently dropped (e.g. hooks, init).
  */
+export interface ParseStreamMessageOptions {
+  /**
+   * Partial-message mode (Claude's `--include-partial-messages`).
+   *
+   * When the CLI streams token deltas it *also* emits the finished `assistant`
+   * message for the same content, so forwarding both would render every
+   * sentence twice. With this flag the finished message's `text` / `thinking`
+   * blocks are dropped — the deltas already carried them — while `tool_use`
+   * blocks still come from the finished message, because tool input arrives as
+   * `input_json_delta` fragments that are far more fragile to reassemble than
+   * to read once, whole.
+   *
+   * Deliberately stateless: a single adapter instance may be shared across
+   * sessions, so this must not be inferred by remembering message ids.
+   */
+  partialMessages?: boolean;
+}
+
 export function parseStreamMessage(
   raw: Record<string, unknown>,
+  options: ParseStreamMessageOptions = {},
 ): StreamMessage | null {
   const type = raw.type as string | undefined;
-  const parsed = parseStreamMessageInner(raw, type);
+  const parsed = parseStreamMessageInner(raw, type, options);
   if (parsed) {
     parsed.timestamp =
       typeof raw.timestamp === "number" ? raw.timestamp : Date.now();
@@ -107,11 +126,53 @@ export function parseStreamMessage(
   return parsed;
 }
 
+/**
+ * One `stream_event` line from Claude's `--include-partial-messages` output.
+ *
+ * Only the two deltas that carry displayable text become messages; every
+ * lifecycle event (`message_start`, `content_block_start`, `content_block_stop`,
+ * `message_delta`, `message_stop`) is structural and yields `null`.
+ *
+ * `signature_delta` is the thinking block's cryptographic signature, not prose,
+ * and `input_json_delta` is a fragment of a tool's JSON input — the finished
+ * `assistant` message carries that input whole, so both are dropped here.
+ */
+function parseStreamEvent(
+  raw: Record<string, unknown>,
+): StreamMessage | null {
+  const event = raw.event as Record<string, unknown> | undefined;
+  if (!event || event.type !== "content_block_delta") return null;
+
+  const delta = event.delta as Record<string, unknown> | undefined;
+  if (!delta) return null;
+
+  if (delta.type === "text_delta") {
+    const text = delta.text;
+    if (typeof text !== "string" || text.length === 0) return null;
+    return { type: "assistant", content: text };
+  }
+
+  if (delta.type === "thinking_delta") {
+    const thinking = delta.thinking;
+    if (typeof thinking !== "string" || thinking.length === 0) return null;
+    return { type: "assistant", subtype: "thinking", content: thinking };
+  }
+
+  return null;
+}
+
 function parseStreamMessageInner(
   raw: Record<string, unknown>,
   type: string | undefined,
+  options: ParseStreamMessageOptions,
 ): StreamMessage | null {
   switch (type) {
+    // Gated on the mode, not merely parsed when present: a parser that read
+    // deltas *and* finished blocks would emit every sentence twice. Each mode
+    // must be self-consistent even if fed the other mode's output.
+    case "stream_event":
+      return options.partialMessages ? parseStreamEvent(raw) : null;
+
     case "assistant": {
       const subtype = raw.subtype as string | undefined;
       if (subtype === "thinking") {
@@ -147,9 +208,13 @@ function parseStreamMessageInner(
       }
       const blocks = (Array.isArray(msg?.content) ? msg.content : []) as ContentBlock[];
 
-      const thinkingTexts = blocks
-        .filter((b) => b.type === "thinking" && b.text)
-        .map((b) => b.text as string);
+      // In partial-message mode the deltas already delivered these two block
+      // kinds; re-emitting them here is what would double every sentence.
+      const thinkingTexts = options.partialMessages
+        ? []
+        : blocks
+            .filter((b) => b.type === "thinking" && b.text)
+            .map((b) => b.text as string);
       if (thinkingTexts.length > 0) {
         return {
           type: "assistant",
@@ -158,9 +223,11 @@ function parseStreamMessageInner(
         };
       }
 
-      const texts = blocks
-        .filter((b) => b.type === "text" && b.text)
-        .map((b) => b.text as string);
+      const texts = options.partialMessages
+        ? []
+        : blocks
+            .filter((b) => b.type === "text" && b.text)
+            .map((b) => b.text as string);
 
       const toolUses = blocks.filter((b) => b.type === "tool_use");
 

@@ -24,12 +24,18 @@ export interface SessionOptions {
    * Leave unset for interactive chat sessions where a human should approve.
    */
   autoApprove?: boolean;
-  /**
-   * Streaming mode toggle for adapters that wrap an HTTP-based backend such as
-   * Ollama. When `true`, the adapter emits one {@link StreamMessage} per token
-   * delta as they arrive. When `false`, the adapter buffers the entire response
-   * and emits a single message once generation completes. Adapters that don't
-   * support a non-streaming mode may ignore this flag.
+   /**
+   * Token-level streaming toggle. When `true`, the adapter emits one
+   * {@link StreamMessage} per token delta as it arrives; consumers concatenate
+   * consecutive plain-assistant deltas into a single growing bubble. When
+   * `false`, the whole response is buffered and emitted once.
+   *
+   * Honoured by HTTP-backed adapters (Ollama) and, since #42, by the Claude CLI
+   * adapter, where it adds `--include-partial-messages`. **The adapter must be
+   * built for the same mode** (`createClaudeAdapter({ stream: true })`) so the
+   * parser knows to read deltas instead of finished blocks.
+   *
+   * Adapters with no non-streaming mode may ignore this flag.
    */
   stream?: boolean;
 }

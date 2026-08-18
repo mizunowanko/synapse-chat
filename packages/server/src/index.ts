@@ -48,6 +48,8 @@ export type {
 // CLI adapters (Claude, Gemini, Gemma). Re-exported via the "./adapters" subpath too.
 export {
   claudeAdapter,
+  createClaudeAdapter,
+  type ClaudeAdapterOptions,
   buildClaudeArgs,
   parseClaudeOutput,
   formatClaudeInput,
