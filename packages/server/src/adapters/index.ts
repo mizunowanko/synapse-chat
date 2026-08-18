@@ -1,8 +1,10 @@
 export {
   claudeAdapter,
+  createClaudeAdapter,
   buildClaudeArgs,
   parseClaudeOutput,
   formatClaudeInput,
+  type ClaudeAdapterOptions,
 } from "./claude.js";
 
 export {
