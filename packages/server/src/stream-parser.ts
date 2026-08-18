@@ -137,6 +137,58 @@ export function parseStreamMessage(
  * and `input_json_delta` is a fragment of a tool's JSON input — the finished
  * `assistant` message carries that input whole, so both are dropped here.
  */
+
+/**
+ * A stateful reader for one CLI session's stdout, layered over the pure
+ * {@link parseStreamMessage}.
+ *
+ * #44: partial mode cannot simply drop every finished `text` / `thinking`
+ * block. Locally synthesised replies — `/clear` and friends, which the CLI
+ * answers itself with `model: "<synthetic>"` — never pass through the model and
+ * so emit **no deltas at all**. Dropping their finished message deleted the
+ * only copy, and a consumer waiting for a reply span forever.
+ *
+ * So the suppression is conditioned on an observed fact rather than an
+ * assumption: was a delta actually seen for the message now finishing?
+ *
+ * `sawDelta` is reset at `message_start` and at `result`, **never when a
+ * finished message is seen** — one `message_start` yields several finished
+ * `assistant` lines (one per content block), and resetting on the first would
+ * let the second through and double the body.
+ *
+ * One instance per session: the flag tracks a single stdout stream.
+ */
+export function createStreamMessageParser(
+  options: ParseStreamMessageOptions = {},
+): (raw: Record<string, unknown>) => StreamMessage | null {
+  let sawDelta = false;
+
+  return (raw) => {
+    const type = raw.type as string | undefined;
+
+    if (type === "stream_event") {
+      const event = raw.event as Record<string, unknown> | undefined;
+      const eventType = event?.type;
+      if (eventType === "message_start") sawDelta = false;
+      const parsed = parseStreamMessage(raw, options);
+      if (parsed) sawDelta = true;
+      return parsed;
+    }
+
+    if (type === "result") {
+      const parsed = parseStreamMessage(raw, options);
+      sawDelta = false;
+      return parsed;
+    }
+
+    // Suppress the finished prose only when its deltas really arrived.
+    return parseStreamMessage(raw, {
+      ...options,
+      partialMessages: options.partialMessages === true && sawDelta,
+    });
+  };
+}
+
 function parseStreamEvent(
   raw: Record<string, unknown>,
 ): StreamMessage | null {
