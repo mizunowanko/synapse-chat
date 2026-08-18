@@ -13,6 +13,7 @@ export {
 } from "./stream-processor.js";
 export {
   parseStreamMessage,
+  createStreamMessageParser,
   extractSessionId,
   extractResultUsage,
   toTokenUsage,
