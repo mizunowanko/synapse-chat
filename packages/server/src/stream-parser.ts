@@ -429,6 +429,15 @@ function parseStreamMessageInner(
 
     // Claude CLI emits rate_limit_event on stdout during rate limiting.
     // Drop these — retry logic lives at the process-manager layer.
+    // `/clear`. The payload carries only ids and a timestamp — there is no text
+    // to show — so this is surfaced as an open `system` variant and the app
+    // decides whether it is worth drawing. Previously the CLI followed the
+    // reset with a synthetic `"(no content)"` assistant message, which is what
+    // consumers had been treating as the visible trace of a clear; it no longer
+    // does, leaving `/clear` completely silent.
+    case "conversation_reset":
+      return { type: "system", subtype: "conversation-reset", content: "" };
+
     case "rate_limit_event":
     case "error":
       return null;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createStreamMessageParser } from "./stream-parser.js";
+import { parseStreamMessage, createStreamMessageParser } from "./stream-parser.js";
 
 /**
  * Fixtures captured from `claude 2.1.212`. The `/clear` shape in particular is
@@ -99,5 +99,32 @@ describe("#44 インスタンスは独立", () => {
     a.call(null, textDelta("x"));
     // b は差分を見ていないので、完成側を捨ててはいけない
     expect(b(finishedText("そのまま"))).toMatchObject({ content: "そのまま" });
+  });
+});
+
+describe("#46 conversation_reset", () => {
+  /** Verbatim from `claude 2.1.212` — ids and a timestamp, no text. */
+  const reset = {
+    type: "conversation_reset",
+    new_conversation_id: "dc9494eb-60a4-4e6c-bcc1-2c5277841a11",
+    session_id: "3878f0aa-8fd6-4df5-9b40-8535ae295d26",
+    uuid: "850570dd-8d91-441e-af31-028d664c5108",
+    timestamp: 1787785152666,
+  };
+
+  it("通す（消費側が描くかどうかは別の判断）", () => {
+    expect(parseStreamMessage(reset)).toMatchObject({
+      type: "system",
+      subtype: "conversation-reset",
+    });
+  });
+
+  it("partial モードでも通る", () => {
+    const parse = createStreamMessageParser({ partialMessages: true });
+    expect(parse(reset)).toMatchObject({ type: "system", subtype: "conversation-reset" });
+  });
+
+  it("本文は持たない（ラベルは消費側が subtype から引く）", () => {
+    expect((parseStreamMessage(reset) as { content?: string })?.content).toBe("");
   });
 });
