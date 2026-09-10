@@ -1,5 +1,5 @@
 /**
- * `agent.spec.yaml` ↔ {@link AgentSpec}. Parsing validates, because a spec with
+ * `agent.spec.yaml` ↔ {@link Briefing}. Parsing validates, because a spec with
  * a missing `name` or a section without a heading renders a file that silently
  * says nothing — the failure would surface as an agent that quietly lost half
  * its instructions, which is the worst possible place to find it.
@@ -8,45 +8,45 @@
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import type {
-  AgentSpec,
-  AgentSpecRule,
-  AgentSpecSection,
-  AgentSpecSkill,
-  AgentSpecSubagent,
+  Briefing,
+  BriefingRule,
+  BriefingSection,
+  BriefingSkill,
+  BriefingSubagent,
   ProviderFrontmatter,
 } from "./types.js";
-import { isRenderTarget } from "./types.js";
+import { isLayoutName } from "./types.js";
 
-class SpecError extends Error {
+class BriefingError extends Error {
   constructor(message: string) {
-    super(`agent-spec: ${message}`);
-    this.name = "SpecError";
+    super(`briefing: ${message}`);
+    this.name = "BriefingError";
   }
 }
 
 function record(value: unknown, where: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new SpecError(`${where} must be a mapping.`);
+    throw new BriefingError(`${where} must be a mapping.`);
   }
   return value as Record<string, unknown>;
 }
 
 function requiredString(value: unknown, where: string): string {
   if (typeof value !== "string" || value.trim() === "") {
-    throw new SpecError(`${where} is required and must be a non-empty string.`);
+    throw new BriefingError(`${where} is required and must be a non-empty string.`);
   }
   return value;
 }
 
 function optionalString(value: unknown, where: string): string | undefined {
   if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string") throw new SpecError(`${where} must be a string.`);
+  if (typeof value !== "string") throw new BriefingError(`${where} must be a string.`);
   return value;
 }
 
 function list(value: unknown, where: string): unknown[] {
   if (value === undefined || value === null) return [];
-  if (!Array.isArray(value)) throw new SpecError(`${where} must be a list.`);
+  if (!Array.isArray(value)) throw new BriefingError(`${where} must be a list.`);
   return value;
 }
 
@@ -55,15 +55,15 @@ function providerFrontmatter(value: unknown, where: string): ProviderFrontmatter
   const table = record(value, where);
   const out: ProviderFrontmatter = {};
   for (const [target, keys] of Object.entries(table)) {
-    if (!isRenderTarget(target)) {
-      throw new SpecError(`${where}.${target} is not a known target (claude / agents / codex).`);
+    if (!isLayoutName(target)) {
+      throw new BriefingError(`${where}.${target} is not a known target (claude / agents / codex).`);
     }
     out[target] = record(keys, `${where}.${target}`);
   }
   return out;
 }
 
-function parseSections(value: unknown): AgentSpecSection[] {
+function parseSections(value: unknown): BriefingSection[] {
   return list(value, "sections").map((entry, i) => {
     const table = record(entry, `sections[${i}]`);
     return {
@@ -73,7 +73,7 @@ function parseSections(value: unknown): AgentSpecSection[] {
   });
 }
 
-function parseSkills(value: unknown): AgentSpecSkill[] {
+function parseSkills(value: unknown): BriefingSkill[] {
   return list(value, "skills").map((entry, i) => {
     const table = record(entry, `skills[${i}]`);
     return {
@@ -85,7 +85,7 @@ function parseSkills(value: unknown): AgentSpecSkill[] {
   });
 }
 
-function parseSubagents(value: unknown): AgentSpecSubagent[] {
+function parseSubagents(value: unknown): BriefingSubagent[] {
   return list(value, "subagents").map((entry, i) => {
     const table = record(entry, `subagents[${i}]`);
     return {
@@ -97,7 +97,7 @@ function parseSubagents(value: unknown): AgentSpecSubagent[] {
   });
 }
 
-function parseRules(value: unknown): AgentSpecRule[] {
+function parseRules(value: unknown): BriefingRule[] {
   return list(value, "rules").map((entry, i) => {
     const table = record(entry, `rules[${i}]`);
     return {
@@ -122,7 +122,7 @@ function maybeFrontmatter(value: unknown, where: string): { providerFrontmatter?
   return parsed ? { providerFrontmatter: parsed } : {};
 }
 
-export function parseSpec(yaml: string): AgentSpec {
+export function parseBriefing(yaml: string): Briefing {
   const table = record(parseYaml(yaml), "spec");
   return {
     name: requiredString(table.name, "name"),
@@ -140,7 +140,7 @@ export function parseSpec(yaml: string): AgentSpec {
  * prose lines survive a round trip instead of being rewrapped into something a
  * `git diff` cannot follow.
  */
-export function serializeSpec(spec: AgentSpec): string {
+export function serializeBriefing(spec: Briefing): string {
   return stringifyYaml(
     {
       name: spec.name,

@@ -12,10 +12,10 @@
  *    Codex every skill twice.
  */
 
-import type { RenderTarget } from "./types.js";
+import type { LayoutName } from "./types.js";
 
-export interface ProviderLayout {
-  target: RenderTarget;
+export interface Layout {
+  target: LayoutName;
   /** Root instruction file. `claude` gets its own; `agents` and `codex` share one. */
   instructionFile: string;
   /** Directory holding `<name>/SKILL.md`. */
@@ -33,7 +33,7 @@ export interface ProviderLayout {
   legacyRulesDir?: string;
 }
 
-export const PROVIDER_LAYOUTS: Record<RenderTarget, ProviderLayout> = {
+export const LAYOUTS: Record<LayoutName, Layout> = {
   claude: {
     target: "claude",
     instructionFile: "CLAUDE.md",

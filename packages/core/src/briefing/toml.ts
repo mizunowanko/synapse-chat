@@ -62,7 +62,7 @@ export function fromToml(text: string): Record<string, unknown> {
 
 class TomlError extends Error {
   constructor(message: string) {
-    super(`agent-spec: invalid TOML — ${message}`);
+    super(`briefing: invalid TOML — ${message}`);
     this.name = "TomlError";
   }
 }

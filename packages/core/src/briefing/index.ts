@@ -6,36 +6,36 @@
  * talk to* a provider, this one hides *where a provider keeps its
  * instructions*. A consumer holds a spec and never learns either.
  *
- *   render(spec, target)      spec  → files (pure; returns path → content)
- *   renderAll(spec)           spec  → the whole tree, shared paths checked
+ *   handOut(spec, target)      spec  → files (pure; returns path → content)
+ *   handOutAll(spec)           spec  → the whole tree, shared paths checked
  *   importFrom(dir, target)   files → spec  (one-shot migration bootstrap)
- *   detectEdits(spec, dir)    which generated files a human has since touched
+ *   detectMarkUps(spec, dir)    which generated files a human has since touched
  *   absorb(spec, target, dir) those edits → spec, so they reach every provider
  */
 
 export type {
-  AgentSpec,
-  AgentSpecRule,
-  AgentSpecSection,
-  AgentSpecSkill,
-  AgentSpecSubagent,
+  Briefing,
+  BriefingRule,
+  BriefingSection,
+  BriefingSkill,
+  BriefingSubagent,
   ProviderFrontmatter,
-  RenderTarget,
-  RenderedFiles,
+  LayoutName,
+  HandoutFiles,
 } from "./types.js";
-export { RENDER_TARGETS, isRenderTarget } from "./types.js";
-export { PROVIDER_LAYOUTS, type ProviderLayout } from "./providers.js";
-export { render, renderAll, renderInstructions } from "./render.js";
-export { importFrom } from "./import.js";
-export { absorb, detectEdits, type AbsorbResult, type EditedFile } from "./absorb.js";
-export { parseSpec, serializeSpec } from "./spec.js";
+export { LAYOUT_NAMES, isLayoutName } from "./types.js";
+export { LAYOUTS, type Layout } from "./layouts.js";
+export { render, handOutAll, handOutInstructions } from "./hand-out.js";
+export { importFrom } from "./collect.js";
+export { absorb, detectMarkUps, type CollectResult, type MarkedUpFile } from "./collect.js";
+export { parseBriefing, serializeBriefing } from "./serialize.js";
 export {
-  digestOf,
-  isHandEdited,
+  fingerprintOf,
+  isMarkedUp,
   parseFrontmatter,
   splitSections,
-  stripMarker,
+  stripFingerprint,
   withFrontmatter,
-  withMarker,
+  withFingerprint,
 } from "./markdown.js";
 export { fromToml, toToml } from "./toml.js";

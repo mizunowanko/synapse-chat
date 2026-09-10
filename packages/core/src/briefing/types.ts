@@ -3,7 +3,7 @@
  * instructions, projected onto every provider we support.
  *
  * The spec is the SSoT. `CLAUDE.md`, `AGENTS.md`, `.claude/skills/…`,
- * `.agents/skills/…`, `.codex/agents/*.toml` are all *derived*: `render()`
+ * `.agents/skills/…`, `.codex/agents/*.toml` are all *derived*: `handOut()`
  * produces them, and nothing in this module reads them back except
  * `importFrom()`, which exists only to bootstrap the migration.
  *
@@ -17,12 +17,12 @@
  */
 
 /** The three projections. `agents` is agy; Codex shares its instruction file. */
-export type RenderTarget = "claude" | "agents" | "codex";
+export type LayoutName = "claude" | "agents" | "codex";
 
-export const RENDER_TARGETS: readonly RenderTarget[] = ["claude", "agents", "codex"];
+export const LAYOUT_NAMES: readonly LayoutName[] = ["claude", "agents", "codex"];
 
-export function isRenderTarget(value: string): value is RenderTarget {
-  return (RENDER_TARGETS as readonly string[]).includes(value);
+export function isLayoutName(value: string): value is LayoutName {
+  return (LAYOUT_NAMES as readonly string[]).includes(value);
 }
 
 /**
@@ -33,7 +33,7 @@ export function isRenderTarget(value: string): value is RenderTarget {
  * Body text is deliberately not overridable here. These keys are read by the
  * harness, not by the model, so they cannot leak the adapter into the prose.
  */
-export type ProviderFrontmatter = Partial<Record<RenderTarget, Record<string, unknown>>>;
+export type ProviderFrontmatter = Partial<Record<LayoutName, Record<string, unknown>>>;
 
 /**
  * A `## ` chunk of the instruction file. `heading` is the identity — renaming a
@@ -41,20 +41,20 @@ export type ProviderFrontmatter = Partial<Record<RenderTarget, Record<string, un
  * projection are a separate issue, and a synthetic stable id we cannot yet
  * exercise would be untested weight.
  */
-export interface AgentSpecSection {
+export interface BriefingSection {
   heading: string;
   /** Verbatim Markdown. Carried through unchanged; may contain `###`, fences, tables. */
   body: string;
 }
 
-export interface AgentSpecSkill {
+export interface BriefingSkill {
   name: string;
   description: string;
   body: string;
   providerFrontmatter?: ProviderFrontmatter;
 }
 
-export interface AgentSpecSubagent {
+export interface BriefingSubagent {
   name: string;
   description: string;
   /**
@@ -69,23 +69,23 @@ export interface AgentSpecSubagent {
  * An always-on rule. Codex has no rules container at all, so rules are folded
  * into the instruction file for every target (see `render.ts`).
  */
-export interface AgentSpecRule {
+export interface BriefingRule {
   name: string;
   body: string;
 }
 
-export interface AgentSpec {
+export interface Briefing {
   /** Directory / identifier name, e.g. `Amanatsu`. */
   name: string;
-  /** Human-facing name used as the `# ` title; defaults to {@link AgentSpec.name}. */
+  /** Human-facing name used as the `# ` title; defaults to {@link Briefing.name}. */
   displayName?: string;
   /** One or two lines placed directly under the title, before the first `## `. */
   role?: string;
-  sections: AgentSpecSection[];
-  skills: AgentSpecSkill[];
-  subagents: AgentSpecSubagent[];
-  rules: AgentSpecRule[];
+  sections: BriefingSection[];
+  skills: BriefingSkill[];
+  subagents: BriefingSubagent[];
+  rules: BriefingRule[];
 }
 
 /** Render output: repo-relative path → file content. */
-export type RenderedFiles = Record<string, string>;
+export type HandoutFiles = Record<string, string>;

@@ -8,10 +8,10 @@
  * returns `path → content` has no way to express a deletion.
  */
 
-import { normalizeTrailingNewline, withFrontmatter, withMarker } from "./markdown.js";
-import { PROVIDER_LAYOUTS } from "./providers.js";
+import { normalizeTrailingNewline, withFrontmatter, withFingerprint } from "./markdown.js";
+import { LAYOUTS } from "./layouts.js";
 import { toToml } from "./toml.js";
-import { RENDER_TARGETS, type AgentSpec, type RenderTarget, type RenderedFiles } from "./types.js";
+import { LAYOUT_NAMES, type Briefing, type LayoutName, type HandoutFiles } from "./types.js";
 
 /**
  * The instruction file body. **Identical for every target** — that identity is
@@ -24,7 +24,7 @@ import { RENDER_TARGETS, type AgentSpec, type RenderTarget, type RenderedFiles }
  * for all targets while *also* emitting `.claude/rules/` + `.agents/rules/`
  * would feed Claude and agy each rule twice. One place, every provider.
  */
-export function renderInstructions(spec: AgentSpec): string {
+export function handOutInstructions(spec: Briefing): string {
   const parts: string[] = [`# ${spec.displayName ?? spec.name}`];
   const role = spec.role?.trim();
   if (role) parts.push(role);
@@ -39,21 +39,21 @@ function toSection(rule: { name: string; body: string }): { heading: string; bod
 }
 
 function extras(
-  providerFrontmatter: Partial<Record<RenderTarget, Record<string, unknown>>> | undefined,
-  target: RenderTarget,
+  providerFrontmatter: Partial<Record<LayoutName, Record<string, unknown>>> | undefined,
+  target: LayoutName,
 ): Record<string, unknown> {
   return providerFrontmatter?.[target] ?? {};
 }
 
 /** Projects `spec` onto one provider. Keys are paths relative to the agent directory. */
-export function render(spec: AgentSpec, target: RenderTarget): RenderedFiles {
-  const layout = PROVIDER_LAYOUTS[target];
-  const files: RenderedFiles = {
-    [layout.instructionFile]: withMarker(renderInstructions(spec)),
+export function handOut(spec: Briefing, target: LayoutName): HandoutFiles {
+  const layout = LAYOUTS[target];
+  const files: HandoutFiles = {
+    [layout.instructionFile]: withFingerprint(handOutInstructions(spec)),
   };
 
   for (const skill of spec.skills) {
-    files[`${layout.skillDir}/${skill.name}/SKILL.md`] = withMarker(
+    files[`${layout.skillDir}/${skill.name}/SKILL.md`] = withFingerprint(
       withFrontmatter(
         { name: skill.name, description: skill.description, ...extras(skill.providerFrontmatter, target) },
         skill.body,
@@ -63,7 +63,7 @@ export function render(spec: AgentSpec, target: RenderTarget): RenderedFiles {
 
   for (const subagent of spec.subagents) {
     if (layout.subagentFormat === "toml") {
-      files[`${layout.subagentDir}/${subagent.name}.toml`] = withMarker(
+      files[`${layout.subagentDir}/${subagent.name}.toml`] = withFingerprint(
         toToml({
           name: subagent.name,
           description: subagent.description,
@@ -73,7 +73,7 @@ export function render(spec: AgentSpec, target: RenderTarget): RenderedFiles {
         "toml",
       );
     } else {
-      files[`${layout.subagentDir}/${subagent.name}.md`] = withMarker(
+      files[`${layout.subagentDir}/${subagent.name}.md`] = withFingerprint(
         withFrontmatter(
           {
             name: subagent.name,
@@ -97,14 +97,14 @@ export function render(spec: AgentSpec, target: RenderTarget): RenderedFiles {
  * had been given two different sets of instructions and naming the adapter out
  * loud).
  */
-export function renderAll(spec: AgentSpec, targets: readonly RenderTarget[] = RENDER_TARGETS): RenderedFiles {
-  const merged: RenderedFiles = {};
+export function handOutAll(spec: Briefing, targets: readonly LayoutName[] = LAYOUT_NAMES): HandoutFiles {
+  const merged: HandoutFiles = {};
   for (const target of targets) {
-    for (const [path, content] of Object.entries(render(spec, target))) {
+    for (const [path, content] of Object.entries(handOut(spec, target))) {
       const existing = merged[path];
       if (existing !== undefined && existing !== content) {
         throw new Error(
-          `agent-spec: targets disagree on ${path}. Shared files must render identically.`,
+          `briefing: targets disagree on ${path}. Shared files must render identically.`,
         );
       }
       merged[path] = content;

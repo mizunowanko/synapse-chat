@@ -4,12 +4,12 @@ import { dirname, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { absorb, detectEdits } from "./absorb.js";
-import { withMarker } from "./markdown.js";
-import { render, renderAll } from "./render.js";
-import type { AgentSpec } from "./types.js";
+import { absorb, detectMarkUps } from "./collect.js";
+import { withFingerprint } from "./markdown.js";
+import { render, handOutAll } from "./hand-out.js";
+import type { Briefing } from "./types.js";
 
-const base: AgentSpec = {
+const base: Briefing = {
   name: "Amanatsu",
   displayName: "アマナツ",
   role: "Atelier vault の分析担当。",
@@ -48,8 +48,8 @@ function read(relative: string): string {
 }
 
 /** Lays the whole rendered tree down on disk, the way a consumer's CLI would. */
-function renderToDisk(spec: AgentSpec): void {
-  for (const [relative, content] of Object.entries(renderAll(spec))) write(relative, content);
+function renderToDisk(spec: Briefing): void {
+  for (const [relative, content] of Object.entries(handOutAll(spec))) write(relative, content);
 }
 
 beforeEach(() => {
@@ -61,31 +61,31 @@ afterEach(() => {
   rmSync(dirname(dir), { recursive: true, force: true });
 });
 
-describe("detectEdits", () => {
+describe("detectMarkUps", () => {
   it("reports nothing right after a render, and still nothing after a re-render", () => {
     // The failure this guards against is the tool crying wolf on every run: if
     // the digest is taken over anything other than what stripping leaves
     // behind, every file reads as edited forever and the warning stops meaning
     // anything.
     renderToDisk(base);
-    expect(detectEdits(base, dir)).toEqual([]);
+    expect(detectMarkUps(base, dir)).toEqual([]);
     renderToDisk(base);
-    expect(detectEdits(base, dir)).toEqual([]);
+    expect(detectMarkUps(base, dir)).toEqual([]);
   });
 
   it("reports nothing when the directory has not been rendered at all", () => {
     // Absent is not edited — that is just a fresh checkout.
-    expect(detectEdits(base, dir)).toEqual([]);
+    expect(detectMarkUps(base, dir)).toEqual([]);
   });
 
   it("names the edited file and every target that renders it", () => {
     renderToDisk(base);
     write("CLAUDE.md", `${read("CLAUDE.md")}\n## 追記\n\n手で足した。\n`);
-    expect(detectEdits(base, dir)).toEqual([{ path: "CLAUDE.md", targets: ["claude"] }]);
+    expect(detectMarkUps(base, dir)).toEqual([{ path: "CLAUDE.md", targets: ["claude"] }]);
 
     // AGENTS.md is shared, so it legitimately answers to two targets.
     write("AGENTS.md", `${read("AGENTS.md")}\n## 追記\n\n手で足した。\n`);
-    expect(detectEdits(base, dir)).toEqual([
+    expect(detectMarkUps(base, dir)).toEqual([
       { path: "AGENTS.md", targets: ["agents", "codex"] },
       { path: "CLAUDE.md", targets: ["claude"] },
     ]);
@@ -94,7 +94,7 @@ describe("detectEdits", () => {
   it("reports a hand-authored file that carries no marker", () => {
     // Never silently overwrite the only on-disk copy of somebody's prose.
     write("CLAUDE.md", "# 手書き\n\nこれは生成物ではない。\n");
-    expect(detectEdits(base, dir, ["claude"])).toEqual([
+    expect(detectMarkUps(base, dir, ["claude"])).toEqual([
       { path: "CLAUDE.md", targets: ["claude"] },
     ]);
   });
@@ -102,7 +102,7 @@ describe("detectEdits", () => {
   it("ignores files under the provider directories that render never produces", () => {
     renderToDisk(base);
     write(".claude/notes.md", "無関係なメモ。\n");
-    expect(detectEdits(base, dir)).toEqual([]);
+    expect(detectMarkUps(base, dir)).toEqual([]);
   });
 });
 
@@ -126,7 +126,7 @@ describe("absorb", () => {
     expect(absorbed).toEqual(["CLAUDE.md"]);
     expect(spec.sections[0]?.body).toBe("数字を読む。ただし出典を添える。\n");
 
-    const files = renderAll(spec);
+    const files = handOutAll(spec);
     expect(files["AGENTS.md"]).toContain("ただし出典を添える。");
     expect(files["CLAUDE.md"]).toBe(files["AGENTS.md"]);
   });
@@ -138,7 +138,7 @@ describe("absorb", () => {
     const { spec } = absorb(base, "agents", dir);
     expect(spec.sections.map((section) => section.heading)).toEqual(["役割", "作法", "新しい章"]);
 
-    const files = renderAll(spec);
+    const files = handOutAll(spec);
     expect(files["CLAUDE.md"]).toContain("agy 側で足した。");
     expect(files["CLAUDE.md"]).toBe(files["AGENTS.md"]);
   });
@@ -152,9 +152,9 @@ describe("absorb", () => {
 
     const { spec } = absorb(base, "claude", dir);
     expect(spec.sections.map((section) => section.heading)).toEqual(["役割", "作法", "末尾追記"]);
-    const rendered = renderAll(spec)["CLAUDE.md"] ?? "";
+    const rendered = handOutAll(spec)["CLAUDE.md"] ?? "";
     expect(rendered).toContain("マーカーの下に書いた。");
-    expect(rendered.match(/agent-spec:v1/g)).toHaveLength(1);
+    expect(rendered.match(/briefing:v1/g)).toHaveLength(1);
   });
 
   it("keeps a folded rule a rule rather than promoting it to a section", () => {
@@ -172,7 +172,7 @@ describe("absorb", () => {
 
     const once = absorb(base, "claude", dir).spec;
     renderToDisk(once);
-    expect(detectEdits(once, dir)).toEqual([]);
+    expect(detectMarkUps(once, dir)).toEqual([]);
 
     const twice = absorb(once, "claude", dir).spec;
     expect(twice).toEqual(once);
@@ -214,7 +214,7 @@ describe("absorb", () => {
     expect(spec.subagents[0]?.instructions).toBe('まず定義と単位を確認する。\n"引用" と \\ を含む。\n');
 
     // …and it reaches the Markdown-shaped providers.
-    expect(renderAll(spec)[".claude/agents/number-cruncher.md"]).toContain("定義と単位");
+    expect(handOutAll(spec)[".claude/agents/number-cruncher.md"]).toContain("定義と単位");
   });
 
   it("absorbs a Markdown subagent", () => {
@@ -224,7 +224,7 @@ describe("absorb", () => {
 
     const { spec } = absorb(base, "claude", dir);
     expect(spec.subagents[0]?.description).toBe("集計と検算を回す。");
-    expect(renderAll(spec)[".codex/agents/number-cruncher.toml"]).toContain("集計と検算を回す。");
+    expect(handOutAll(spec)[".codex/agents/number-cruncher.toml"]).toContain("集計と検算を回す。");
   });
 
   it("picks up a skill somebody added by dropping a directory in", () => {
@@ -237,7 +237,7 @@ describe("absorb", () => {
     const { spec } = absorb(base, "claude", dir);
     expect(spec.skills.map((skill) => skill.name)).toEqual(["analytics-inspect", "hand-written"]);
     // It reaches the other providers, which is the point of picking it up.
-    expect(renderAll(spec)[".agents/skills/hand-written/SKILL.md"]).toContain("本文。");
+    expect(handOutAll(spec)[".agents/skills/hand-written/SKILL.md"]).toContain("本文。");
   });
 
   it("leaves a spec entry alone when its file is missing", () => {
@@ -267,22 +267,22 @@ describe("absorb", () => {
   });
 
   it("keeps displayName unset when the title still matches the name", () => {
-    const plain: AgentSpec = { ...base, displayName: undefined, sections: base.sections };
+    const plain: Briefing = { ...base, displayName: undefined, sections: base.sections };
     delete (plain as { displayName?: string }).displayName;
     renderToDisk(plain);
     write("CLAUDE.md", read("CLAUDE.md").replace("数字を読む。", "書き換えた。"));
 
     const { spec } = absorb(plain, "claude", dir);
     expect(spec.displayName).toBeUndefined();
-    expect(render(spec, "claude")["CLAUDE.md"]).toContain("# Amanatsu");
+    expect(handOut(spec, "claude")["CLAUDE.md"]).toContain("# Amanatsu");
   });
 
   it("takes in a hand-written marker-free file exactly once", () => {
     // A file we wrote and a file a human wrote are both absorbed, but after the
     // next render the hand-written one carries a marker and stops being an edit.
-    write(".claude/skills/hand-written/SKILL.md", withMarker("---\nname: hand-written\ndescription: d\n---\n\n本文。\n"));
+    write(".claude/skills/hand-written/SKILL.md", withFingerprint("---\nname: hand-written\ndescription: d\n---\n\n本文。\n"));
     const { spec } = absorb(base, "claude", dir);
     renderToDisk(spec);
-    expect(detectEdits(spec, dir)).toEqual([]);
+    expect(detectMarkUps(spec, dir)).toEqual([]);
   });
 });

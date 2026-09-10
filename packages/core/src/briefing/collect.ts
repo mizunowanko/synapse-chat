@@ -12,14 +12,14 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 
-import { parseFrontmatter, splitSections, stripMarker } from "./markdown.js";
-import { PROVIDER_LAYOUTS } from "./providers.js";
+import { parseFrontmatter, splitSections, stripFingerprint } from "./markdown.js";
+import { LAYOUTS } from "./layouts.js";
 import type {
-  AgentSpec,
-  AgentSpecRule,
-  AgentSpecSkill,
-  AgentSpecSubagent,
-  RenderTarget,
+  Briefing,
+  BriefingRule,
+  BriefingSkill,
+  BriefingSubagent,
+  LayoutName,
 } from "./types.js";
 
 /** Frontmatter keys the spec owns; anything else is provider-specific and preserved. */
@@ -47,8 +47,8 @@ function listSubdirs(dir: string): string[] {
 
 function splitProviderFrontmatter(
   frontmatter: Record<string, unknown> | null,
-  target: RenderTarget,
-): Pick<AgentSpecSkill, "providerFrontmatter"> {
+  target: LayoutName,
+): Pick<BriefingSkill, "providerFrontmatter"> {
   const rest = Object.fromEntries(
     Object.entries(frontmatter ?? {}).filter(([key]) => !OWNED_KEYS.has(key)),
   );
@@ -67,30 +67,30 @@ function str(value: unknown, fallback: string): string {
  * Claude-shaped) is surface we would not be able to exercise. It throws instead
  * of pretending.
  */
-export function importFrom(dir: string, target: RenderTarget = "claude"): AgentSpec {
-  const layout = PROVIDER_LAYOUTS[target];
+export function importFrom(dir: string, target: LayoutName = "claude"): Briefing {
+  const layout = LAYOUTS[target];
   if (layout.subagentFormat === "toml") {
     throw new Error(
-      `agent-spec: importing from "${target}" is not supported — import from "claude" or "agents".`,
+      `briefing: importing from "${target}" is not supported — import from "claude" or "agents".`,
     );
   }
 
   const name = basename(dir);
   const raw = readIfExists(join(dir, layout.instructionFile));
   if (raw === null) {
-    throw new Error(`agent-spec: ${join(dir, layout.instructionFile)} not found.`);
+    throw new Error(`briefing: ${join(dir, layout.instructionFile)} not found.`);
   }
 
-  const text = stripMarker(raw).content;
+  const text = stripFingerprint(raw).content;
   const titleMatch = /^# +(.*?)\s*$/m.exec(text.split("\n")[0] ?? "");
   const withoutTitle = titleMatch ? text.split("\n").slice(1).join("\n") : text;
   const { preamble, sections } = splitSections(withoutTitle);
 
-  const skills: AgentSpecSkill[] = [];
+  const skills: BriefingSkill[] = [];
   for (const skillDir of listSubdirs(join(dir, layout.skillDir))) {
     const content = readIfExists(join(skillDir, "SKILL.md"));
     if (content === null) continue;
-    const { frontmatter, body } = parseFrontmatter(stripMarker(content).content);
+    const { frontmatter, body } = parseFrontmatter(stripFingerprint(content).content);
     skills.push({
       name: str(frontmatter?.name, basename(skillDir)),
       description: str(frontmatter?.description, ""),
@@ -99,9 +99,9 @@ export function importFrom(dir: string, target: RenderTarget = "claude"): AgentS
     });
   }
 
-  const subagents: AgentSpecSubagent[] = [];
+  const subagents: BriefingSubagent[] = [];
   for (const file of listFiles(join(dir, layout.subagentDir), ".md")) {
-    const { frontmatter, body } = parseFrontmatter(stripMarker(readFileSync(file, "utf-8")).content);
+    const { frontmatter, body } = parseFrontmatter(stripFingerprint(readFileSync(file, "utf-8")).content);
     subagents.push({
       name: str(frontmatter?.name, basename(file, ".md")),
       description: str(frontmatter?.description, ""),
@@ -113,11 +113,11 @@ export function importFrom(dir: string, target: RenderTarget = "claude"): AgentS
   // Legacy rule files, if this agent had any. Nothing is rendered back into
   // these directories — rules are folded into the instruction body — but they
   // stay on disk, so import has to keep reading them.
-  const rules: AgentSpecRule[] = [];
+  const rules: BriefingRule[] = [];
   if (layout.legacyRulesDir) {
     for (const file of listFiles(join(dir, layout.legacyRulesDir), ".md")) {
       const { frontmatter, body } = parseFrontmatter(
-        stripMarker(readFileSync(file, "utf-8")).content,
+        stripFingerprint(readFileSync(file, "utf-8")).content,
       );
       rules.push({ name: str(frontmatter?.name, basename(file, ".md")), body: `${body.trim()}\n` });
     }

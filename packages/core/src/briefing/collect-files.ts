@@ -11,7 +11,7 @@
  * `render` says what the generator produced; a file whose content still hashes
  * to its marker is by definition free of human input, and re-parsing it could
  * only introduce drift. `absorb` therefore touches exactly the files
- * {@link detectEdits} reports, which is also why running it twice with no edits
+ * {@link detectMarkUps} reports, which is also why running it twice with no edits
  * in between is a literal no-op rather than an approximate one.
  *
  * `importFrom` is the other direction of the same idea, for a directory that
@@ -21,19 +21,19 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 
-import { isHandEdited, parseFrontmatter, splitSections, stripMarker } from "./markdown.js";
-import { PROVIDER_LAYOUTS, type ProviderLayout } from "./providers.js";
-import { render } from "./render.js";
+import { isMarkedUp, parseFrontmatter, splitSections, stripFingerprint } from "./markdown.js";
+import { LAYOUTS, type Layout } from "./layouts.js";
+import { render } from "./hand-out.js";
 import { fromToml } from "./toml.js";
 import {
-  RENDER_TARGETS,
-  type AgentSpec,
-  type AgentSpecRule,
-  type AgentSpecSection,
-  type AgentSpecSkill,
-  type AgentSpecSubagent,
+  LAYOUT_NAMES,
+  type Briefing,
+  type BriefingRule,
+  type BriefingSection,
+  type BriefingSkill,
+  type BriefingSubagent,
   type ProviderFrontmatter,
-  type RenderTarget,
+  type LayoutName,
 } from "./types.js";
 
 /** Frontmatter keys the spec owns; anything else is provider-specific and preserved. */
@@ -42,7 +42,7 @@ const OWNED_KEYS = new Set(["name", "description"]);
 const OWNED_TOML_KEYS = new Set(["name", "description", "developer_instructions"]);
 
 /** One generated file that no longer matches the digest it was stamped with. */
-export interface EditedFile {
+export interface MarkedUpFile {
   /** Path relative to the agent directory, e.g. `CLAUDE.md`. */
   path: string;
   /**
@@ -50,11 +50,11 @@ export interface EditedFile {
    * shared, so they legitimately carry two targets — absorbing such a file from
    * either one gives the same spec.
    */
-  targets: RenderTarget[];
+  targets: LayoutName[];
 }
 
-export interface AbsorbResult {
-  spec: AgentSpec;
+export interface CollectResult {
+  spec: Briefing;
   /** Relative paths whose contents were taken into the spec. */
   absorbed: string[];
 }
@@ -70,16 +70,16 @@ export interface AbsorbResult {
  * A file with no marker at all *is* reported, because it is hand-authored and
  * overwriting it would destroy the only copy.
  */
-export function detectEdits(
-  spec: AgentSpec,
+export function detectMarkUps(
+  spec: Briefing,
   dir: string,
-  targets: readonly RenderTarget[] = RENDER_TARGETS,
-): EditedFile[] {
-  const byPath = new Map<string, RenderTarget[]>();
+  targets: readonly LayoutName[] = LAYOUT_NAMES,
+): MarkedUpFile[] {
+  const byPath = new Map<string, LayoutName[]>();
   for (const target of targets) {
-    for (const relative of Object.keys(render(spec, target))) {
+    for (const relative of Object.keys(handOut(spec, target))) {
       const absolute = join(dir, relative);
-      if (!existsSync(absolute) || !isHandEdited(readFileSync(absolute, "utf-8"))) continue;
+      if (!existsSync(absolute) || !isMarkedUp(readFileSync(absolute, "utf-8"))) continue;
       const seen = byPath.get(relative);
       if (seen) seen.push(target);
       else byPath.set(relative, [target]);
@@ -108,9 +108,9 @@ export function detectEdits(
  * file is never a generated artifact — `importFrom` picks those up once, during
  * migration.
  */
-export function absorb(spec: AgentSpec, target: RenderTarget, dir: string): AbsorbResult {
-  const layout = PROVIDER_LAYOUTS[target];
-  const next: AgentSpec = structuredClone(spec);
+export function absorb(spec: Briefing, target: LayoutName, dir: string): CollectResult {
+  const layout = LAYOUTS[target];
+  const next: Briefing = structuredClone(spec);
   const absorbed: string[] = [];
 
   const instructions = readEdited(dir, layout.instructionFile);
@@ -130,8 +130,8 @@ function readEdited(dir: string, relative: string): string | null {
   const absolute = join(dir, relative);
   if (!existsSync(absolute)) return null;
   const raw = readFileSync(absolute, "utf-8");
-  if (!isHandEdited(raw)) return null;
-  return stripMarker(raw).content;
+  if (!isMarkedUp(raw)) return null;
+  return stripFingerprint(raw).content;
 }
 
 /**
@@ -143,7 +143,7 @@ function readEdited(dir: string, relative: string): string | null {
  * which is the right default: sections are the general case, and a new rule can
  * be promoted in the spec once.
  */
-function applyInstructions(spec: AgentSpec, text: string): void {
+function applyInstructions(spec: Briefing, text: string): void {
   const lines = text.split("\n");
   const titleMatch = /^# +(.*?)\s*$/.exec(lines[0] ?? "");
   const withoutTitle = titleMatch ? lines.slice(1).join("\n") : text;
@@ -158,8 +158,8 @@ function applyInstructions(spec: AgentSpec, text: string): void {
   if (preamble !== (spec.role?.trim() ?? "")) spec.role = preamble;
 
   const ruleNames = new Set(spec.rules.map((rule) => rule.name));
-  const nextSections: AgentSpecSection[] = [];
-  const nextRules: AgentSpecRule[] = [];
+  const nextSections: BriefingSection[] = [];
+  const nextRules: BriefingRule[] = [];
   for (const section of sections) {
     if (ruleNames.has(section.heading)) {
       nextRules.push({ name: section.heading, body: `${section.body}\n` });
@@ -178,7 +178,7 @@ function applyInstructions(spec: AgentSpec, text: string): void {
  */
 function mergeProviderFrontmatter(
   existing: ProviderFrontmatter | undefined,
-  target: RenderTarget,
+  target: LayoutName,
   extras: Record<string, unknown>,
 ): { providerFrontmatter?: ProviderFrontmatter } {
   const merged: ProviderFrontmatter = { ...existing };
@@ -213,12 +213,12 @@ function listFiles(dir: string, suffix: string): string[] {
 }
 
 function absorbSkills(
-  spec: AgentSpec,
-  layout: ProviderLayout,
-  target: RenderTarget,
+  spec: Briefing,
+  layout: Layout,
+  target: LayoutName,
   dir: string,
   absorbed: string[],
-): AgentSpecSkill[] {
+): BriefingSkill[] {
   const known = new Set(spec.skills.map((skill) => skill.name));
   const relativeOf = (name: string): string => `${layout.skillDir}/${name}/SKILL.md`;
 
@@ -247,9 +247,9 @@ function absorbSkills(
 function toSkill(
   name: string,
   content: string,
-  target: RenderTarget,
+  target: LayoutName,
   existing: ProviderFrontmatter | undefined,
-): AgentSpecSkill {
+): BriefingSkill {
   const { frontmatter, body } = parseFrontmatter(content);
   return {
     name: str(frontmatter?.name, name),
@@ -260,12 +260,12 @@ function toSkill(
 }
 
 function absorbSubagents(
-  spec: AgentSpec,
-  layout: ProviderLayout,
-  target: RenderTarget,
+  spec: Briefing,
+  layout: Layout,
+  target: LayoutName,
   dir: string,
   absorbed: string[],
-): AgentSpecSubagent[] {
+): BriefingSubagent[] {
   const isToml = layout.subagentFormat === "toml";
   const suffix = isToml ? ".toml" : ".md";
   const known = new Set(spec.subagents.map((subagent) => subagent.name));
@@ -296,9 +296,9 @@ function absorbSubagents(
 function toSubagentFromMarkdown(
   name: string,
   content: string,
-  target: RenderTarget,
+  target: LayoutName,
   existing: ProviderFrontmatter | undefined,
-): AgentSpecSubagent {
+): BriefingSubagent {
   const { frontmatter, body } = parseFrontmatter(content);
   return {
     name: str(frontmatter?.name, name),
@@ -311,9 +311,9 @@ function toSubagentFromMarkdown(
 function toSubagentFromToml(
   name: string,
   content: string,
-  target: RenderTarget,
+  target: LayoutName,
   existing: ProviderFrontmatter | undefined,
-): AgentSpecSubagent {
+): BriefingSubagent {
   const table = fromToml(content);
   return {
     name: str(table.name, name),

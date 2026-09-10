@@ -4,9 +4,9 @@ import { dirname, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { importFrom } from "./import.js";
-import { renderAll } from "./render.js";
-import { parseSpec, serializeSpec } from "./spec.js";
+import { importFrom } from "./collect.js";
+import { handOutAll } from "./hand-out.js";
+import { parseBriefing, serializeBriefing } from "./serialize.js";
 
 let dir: string;
 
@@ -80,10 +80,10 @@ describe("importFrom", () => {
     put(".claude/skills/s/SKILL.md", "---\nname: s\ndescription: d\n---\n\nbody\n");
     put(".claude/rules/r.md", "推測しない。\n");
 
-    const first = renderAll(importFrom(dir, "claude"));
+    const first = handOutAll(importFrom(dir, "claude"));
     for (const [rel, content] of Object.entries(first)) put(rel, content);
 
-    const second = renderAll(importFrom(dir, "claude"));
+    const second = handOutAll(importFrom(dir, "claude"));
     expect(second).toEqual(first);
     // The folded rule appears exactly once, not once per round trip.
     expect(second["CLAUDE.md"].match(/推測しない。/g)).toHaveLength(1);
@@ -105,18 +105,18 @@ describe("spec serialization", () => {
     put("CLAUDE.md", "# アマナツ\n\n分析担当。\n\n## 役割\n\n数字を読む。\n");
     put(".claude/skills/s/SKILL.md", "---\nname: s\ndescription: d\nallowed-tools: Read\n---\n\nbody\n");
     const spec = importFrom(dir, "claude");
-    expect(parseSpec(serializeSpec(spec))).toEqual(spec);
+    expect(parseBriefing(serializeBriefing(spec))).toEqual(spec);
   });
 
   it("rejects a spec that would render a nameless section", () => {
-    expect(() => parseSpec("name: X\nsections:\n  - body: hi\n")).toThrow(
+    expect(() => parseBriefing("name: X\nsections:\n  - body: hi\n")).toThrow(
       /sections\[0\]\.heading is required/,
     );
   });
 
   it("rejects an unknown provider frontmatter target", () => {
     expect(() =>
-      parseSpec("name: X\nskills:\n  - name: s\n    providerFrontmatter:\n      gemini:\n        a: 1\n"),
+      parseBriefing("name: X\nskills:\n  - name: s\n    providerFrontmatter:\n      gemini:\n        a: 1\n"),
     ).toThrow(/not a known target/);
   });
 });

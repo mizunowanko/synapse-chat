@@ -20,10 +20,10 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
  * the spec as prose and re-rendered underneath a second marker. Stripping is
  * therefore position-independent, and every marker line is removed.
  */
-const MARKER_LINE_RE =
-  /^[ \t]*(?:<!--[ \t]*agent-spec:v1 digest=([0-9a-f]{16})[ \t]*-->|#[ \t]*agent-spec:v1 digest=([0-9a-f]{16}))[ \t]*$/;
+const FINGERPRINT_LINE_RE =
+  /^[ \t]*(?:<!--[ \t]*briefing:v1 fingerprint=([0-9a-f]{16})[ \t]*-->|#[ \t]*briefing:v1 fingerprint=([0-9a-f]{16}))[ \t]*$/;
 
-export function digestOf(content: string): string {
+export function fingerprintOf(content: string): string {
   return createHash("sha256").update(normalizeTrailingNewline(content)).digest("hex").slice(0, 16);
 }
 
@@ -40,12 +40,12 @@ export function normalizeTrailingNewline(content: string): string {
   return `${content.replace(/\n+$/, "")}\n`;
 }
 
-export function withMarker(content: string, style: "markdown" | "toml" = "markdown"): string {
+export function withFingerprint(content: string, style: "markdown" | "toml" = "markdown"): string {
   const normalized = normalizeTrailingNewline(content);
   const marker =
     style === "toml"
-      ? `# agent-spec:v1 digest=${digestOf(normalized)}`
-      : `<!-- agent-spec:v1 digest=${digestOf(normalized)} -->`;
+      ? `# briefing:v1 fingerprint=${fingerprintOf(normalized)}`
+      : `<!-- briefing:v1 fingerprint=${fingerprintOf(normalized)} -->`;
   return `${normalized}\n${marker}\n`;
 }
 
@@ -55,11 +55,11 @@ export function withMarker(content: string, style: "markdown" | "toml" = "markdo
  * All marker lines are removed wherever they sit; the last one wins as the
  * recorded digest, because a re-render appends the newest marker last.
  */
-export function stripMarker(raw: string): { content: string; digest: string | null } {
+export function stripFingerprint(raw: string): { content: string; digest: string | null } {
   let digest: string | null = null;
   const kept: string[] = [];
   for (const line of raw.split("\n")) {
-    const match = MARKER_LINE_RE.exec(line);
+    const match = FINGERPRINT_LINE_RE.exec(line);
     if (match) {
       digest = match[1] ?? match[2] ?? digest;
       continue;
@@ -75,10 +75,10 @@ export function stripMarker(raw: string): { content: string; digest: string | nu
  * ours and are reported as edited, so we never silently overwrite a
  * hand-authored `CLAUDE.md`.
  */
-export function isHandEdited(raw: string): boolean {
-  const { content, digest } = stripMarker(raw);
+export function isMarkedUp(raw: string): boolean {
+  const { content, digest } = stripFingerprint(raw);
   if (digest === null) return true;
-  return digestOf(content) !== digest;
+  return fingerprintOf(content) !== digest;
 }
 
 /**
