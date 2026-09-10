@@ -45,10 +45,10 @@ export function toToml(table: Record<string, unknown>): string {
  * The matching reader, scoped to exactly what {@link toToml} emits: a flat
  * table of strings, numbers, booleans and arrays.
  *
- * `absorb()` needs this so a hand-edited `.codex/agents/*.toml` comes back the
- * same way a hand-edited `.claude/agents/*.md` does. Without it Codex would be
- * the one provider whose subagents are write-only, and "edit any provider's
- * files and it propagates" would quietly have an exception in it.
+ * `collect()` needs this so a marked-up `.codex/agents/*.toml` comes back the
+ * same way a marked-up `.claude/agents/*.md` does. Without it Codex would be
+ * the one provider whose subagents are write-only, and "write on any handout
+ * and it reaches everyone" would quietly have an exception in it.
  *
  * Table headers (`[section]`), dotted keys and inline tables are rejected
  * rather than half-understood: nothing here writes them, so a file containing

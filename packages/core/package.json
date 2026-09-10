@@ -20,9 +20,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./agent-spec": {
-      "types": "./dist/agent-spec/index.d.ts",
-      "default": "./dist/agent-spec/index.js"
+    "./briefing": {
+      "types": "./dist/briefing/index.d.ts",
+      "default": "./dist/briefing/index.js"
     }
   },
   "files": [
@@ -45,7 +45,7 @@
     "types",
     "cli-adapter",
     "stream-json",
-    "agent-spec"
+    "briefing"
   ],
   "publishConfig": {
     "access": "public"

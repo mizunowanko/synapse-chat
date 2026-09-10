@@ -1,93 +1,18 @@
 /**
- * Markdown plumbing shared by `render.ts`, `import.ts` and `absorb.ts`:
- * fence-aware `## ` splitting, frontmatter emission and parsing, and the
- * provenance marker.
+ * Markdown plumbing shared by `hand-out.ts` and `collect.ts`: fence-aware `## `
+ * splitting, and frontmatter emission and parsing.
  */
-
-import { createHash } from "node:crypto";
 
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-
-/**
- * Trailing marker written into every generated file. It carries a digest of the
- * content *around* it, which lets us tell "untouched, safe to overwrite" from
- * "a human edited this" before anything gets clobbered, and lets `absorb()`
- * take the edit back into the spec.
- *
- * **The marker is matched anywhere, not just at the end.** People append to the
- * bottom of a file, which pushes the marker into the middle. An end-anchored
- * regex misses it there — and then the marker text itself gets absorbed into
- * the spec as prose and re-rendered underneath a second marker. Stripping is
- * therefore position-independent, and every marker line is removed.
- */
-const FINGERPRINT_LINE_RE =
-  /^[ \t]*(?:<!--[ \t]*briefing:v1 fingerprint=([0-9a-f]{16})[ \t]*-->|#[ \t]*briefing:v1 fingerprint=([0-9a-f]{16}))[ \t]*$/;
-
-export function fingerprintOf(content: string): string {
-  return createHash("sha256").update(normalizeTrailingNewline(content)).digest("hex").slice(0, 16);
-}
-
-/**
- * Collapse a run of trailing blank lines to exactly one `\n`.
- *
- * Every path that hashes or compares content funnels through here. That is the
- * point: the digest is taken over the *output* of stripping, so "what was
- * hashed" and "what is left after the marker comes off" cannot drift apart. A
- * one-byte disagreement between those two would mark every file as edited on
- * every run, forever.
- */
-export function normalizeTrailingNewline(content: string): string {
-  return `${content.replace(/\n+$/, "")}\n`;
-}
-
-export function withFingerprint(content: string, style: "markdown" | "toml" = "markdown"): string {
-  const normalized = normalizeTrailingNewline(content);
-  const marker =
-    style === "toml"
-      ? `# briefing:v1 fingerprint=${fingerprintOf(normalized)}`
-      : `<!-- briefing:v1 fingerprint=${fingerprintOf(normalized)} -->`;
-  return `${normalized}\n${marker}\n`;
-}
-
-/**
- * Splits a generated file into its content and the digest it was stamped with.
- *
- * All marker lines are removed wherever they sit; the last one wins as the
- * recorded digest, because a re-render appends the newest marker last.
- */
-export function stripFingerprint(raw: string): { content: string; digest: string | null } {
-  let digest: string | null = null;
-  const kept: string[] = [];
-  for (const line of raw.split("\n")) {
-    const match = FINGERPRINT_LINE_RE.exec(line);
-    if (match) {
-      digest = match[1] ?? match[2] ?? digest;
-      continue;
-    }
-    kept.push(line);
-  }
-  return { content: normalizeTrailingNewline(kept.join("\n")), digest };
-}
-
-/**
- * True when the file carries our marker but its content no longer hashes to it —
- * i.e. somebody edited a generated file by hand. Files without a marker are not
- * ours and are reported as edited, so we never silently overwrite a
- * hand-authored `CLAUDE.md`.
- */
-export function isMarkedUp(raw: string): boolean {
-  const { content, digest } = stripFingerprint(raw);
-  if (digest === null) return true;
-  return fingerprintOf(content) !== digest;
-}
 
 /**
  * Fence-aware split on level-2 ATX headings.
  *
  * The naive `text.split(/^## /m)` breaks on any `## ` that happens to sit inside
- * a fenced code block — and agent instructions are full of fenced Markdown
- * samples. Fences are tracked here (``` and ~~~, any length ≥ 3, closed only by
- * a fence of the same character and at least the same length, per CommonMark).
+ * a fenced code block — and instructions for an agent are full of fenced
+ * Markdown samples. Fences are tracked here (``` and ~~~, any length ≥ 3, closed
+ * only by a fence of the same character and at least the same length, per
+ * CommonMark).
  */
 export function splitSections(text: string): {
   preamble: string;
@@ -146,7 +71,7 @@ const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
  * A frontmatter block that is not a YAML mapping (a list, a bare scalar, a
  * syntax error) is reported as absent rather than thrown, because the caller's
  * only recovery would be to treat it as absent anyway, and throwing here would
- * turn one malformed skill into a failed import of the whole agent.
+ * turn one malformed skill into a failed collection of the whole agent.
  */
 export function parseFrontmatter(raw: string): {
   frontmatter: Record<string, unknown> | null;

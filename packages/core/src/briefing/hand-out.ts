@@ -1,34 +1,36 @@
 /**
- * Projection: Agent Spec → provider files. Pure — it returns a path→content
- * map and touches no filesystem.
+ * Handing the briefing out: Briefing → handouts. Pure — it returns a
+ * path → content map and touches no filesystem.
  *
- * **Nothing in this package writes.** `render` hands back what the files should
- * contain and the consumer decides what to do with it, which is what makes the
- * "never delete" rule structural rather than a promise: an API that only ever
- * returns `path → content` has no way to express a deletion.
+ * **Nothing in this package writes.** `handOut` gives back what each file
+ * should contain and the caller decides what to do with it, which is what makes
+ * "never delete" structural rather than a promise: an API whose only output is
+ * `path → content` has no way to express a deletion. In the consuming app those
+ * paths hold the only on-disk copy of a user's agent definitions.
  */
 
-import { normalizeTrailingNewline, withFrontmatter, withFingerprint } from "./markdown.js";
+import { normalizeTrailingNewline, withFingerprint } from "./fingerprint.js";
 import { LAYOUTS } from "./layouts.js";
+import { withFrontmatter } from "./markdown.js";
 import { toToml } from "./toml.js";
-import { LAYOUT_NAMES, type Briefing, type LayoutName, type HandoutFiles } from "./types.js";
+import { LAYOUT_NAMES, type Briefing, type HandoutFiles, type LayoutName } from "./types.js";
 
 /**
- * The instruction file body. **Identical for every target** — that identity is
- * the load-bearing property of this whole design, and `render.test.ts` asserts
+ * The instruction file body. **Identical for every layout** — that identity is
+ * the load-bearing property of the whole design, and `hand-out.test.ts` asserts
  * `CLAUDE.md === AGENTS.md` byte for byte.
  *
- * Rules are folded in here as trailing `## ` sections (issue #50
- * 「決めること」1). Codex has no rules container, so *some* target has to fold;
- * folding for only some targets would split the shared `AGENTS.md`, and folding
- * for all targets while *also* emitting `.claude/rules/` + `.agents/rules/`
- * would feed Claude and agy each rule twice. One place, every provider.
+ * Rules are folded in here as trailing `## ` sections. Codex has no rules
+ * container, so *some* layout has to fold; folding for only some of them would
+ * split the shared `AGENTS.md`, and folding everywhere while *also* writing
+ * `.claude/rules/` + `.agents/rules/` would hand Claude and agy each rule
+ * twice. One place, every provider.
  */
-export function handOutInstructions(spec: Briefing): string {
-  const parts: string[] = [`# ${spec.displayName ?? spec.name}`];
-  const role = spec.role?.trim();
+export function handOutInstructions(briefing: Briefing): string {
+  const parts: string[] = [`# ${briefing.displayName ?? briefing.name}`];
+  const role = briefing.role?.trim();
   if (role) parts.push(role);
-  for (const section of [...spec.sections, ...spec.rules.map(toSection)]) {
+  for (const section of [...briefing.sections, ...briefing.rules.map(toSection)]) {
     parts.push(`## ${section.heading}\n\n${section.body.trim()}`);
   }
   return normalizeTrailingNewline(parts.join("\n\n"));
@@ -40,35 +42,39 @@ function toSection(rule: { name: string; body: string }): { heading: string; bod
 
 function extras(
   providerFrontmatter: Partial<Record<LayoutName, Record<string, unknown>>> | undefined,
-  target: LayoutName,
+  layoutName: LayoutName,
 ): Record<string, unknown> {
-  return providerFrontmatter?.[target] ?? {};
+  return providerFrontmatter?.[layoutName] ?? {};
 }
 
-/** Projects `spec` onto one provider. Keys are paths relative to the agent directory. */
-export function handOut(spec: Briefing, target: LayoutName): HandoutFiles {
-  const layout = LAYOUTS[target];
+/** Copies `briefing` into one layout. Keys are paths relative to the agent directory. */
+export function handOut(briefing: Briefing, layoutName: LayoutName): HandoutFiles {
+  const layout = LAYOUTS[layoutName];
   const files: HandoutFiles = {
-    [layout.instructionFile]: withFingerprint(handOutInstructions(spec)),
+    [layout.instructionFile]: withFingerprint(handOutInstructions(briefing)),
   };
 
-  for (const skill of spec.skills) {
+  for (const skill of briefing.skills) {
     files[`${layout.skillDir}/${skill.name}/SKILL.md`] = withFingerprint(
       withFrontmatter(
-        { name: skill.name, description: skill.description, ...extras(skill.providerFrontmatter, target) },
+        {
+          name: skill.name,
+          description: skill.description,
+          ...extras(skill.providerFrontmatter, layoutName),
+        },
         skill.body,
       ),
     );
   }
 
-  for (const subagent of spec.subagents) {
+  for (const subagent of briefing.subagents) {
     if (layout.subagentFormat === "toml") {
       files[`${layout.subagentDir}/${subagent.name}.toml`] = withFingerprint(
         toToml({
           name: subagent.name,
           description: subagent.description,
           developer_instructions: normalizeTrailingNewline(subagent.instructions.trim()),
-          ...extras(subagent.providerFrontmatter, target),
+          ...extras(subagent.providerFrontmatter, layoutName),
         }),
         "toml",
       );
@@ -78,7 +84,7 @@ export function handOut(spec: Briefing, target: LayoutName): HandoutFiles {
           {
             name: subagent.name,
             description: subagent.description,
-            ...extras(subagent.providerFrontmatter, target),
+            ...extras(subagent.providerFrontmatter, layoutName),
           },
           subagent.instructions,
         ),
@@ -90,21 +96,26 @@ export function handOut(spec: Briefing, target: LayoutName): HandoutFiles {
 }
 
 /**
- * Projects onto every provider at once. `agents` and `codex` overlap on
+ * Hands out to every layout at once. `agents` and `codex` overlap on
  * `AGENTS.md` and `.agents/skills/`; the overlap must be byte-identical, and a
- * mismatch is thrown rather than silently resolved by write order — a
- * divergence there is exactly the failure the issue documents (agy noticing it
- * had been given two different sets of instructions and naming the adapter out
- * loud).
+ * mismatch throws rather than being resolved by write order.
+ *
+ * A divergence there is exactly the failure the measurements turned up: given
+ * two different sets of instructions for the same reader, agy said out loud
+ * that `AGENTS.md` and `GEMINI.md` told it different things — naming the
+ * adapter, which is the one thing the pupil must never be able to see.
  */
-export function handOutAll(spec: Briefing, targets: readonly LayoutName[] = LAYOUT_NAMES): HandoutFiles {
+export function handOutAll(
+  briefing: Briefing,
+  layouts: readonly LayoutName[] = LAYOUT_NAMES,
+): HandoutFiles {
   const merged: HandoutFiles = {};
-  for (const target of targets) {
-    for (const [path, content] of Object.entries(handOut(spec, target))) {
+  for (const layoutName of layouts) {
+    for (const [path, content] of Object.entries(handOut(briefing, layoutName))) {
       const existing = merged[path];
       if (existing !== undefined && existing !== content) {
         throw new Error(
-          `briefing: targets disagree on ${path}. Shared files must render identically.`,
+          `briefing: layouts disagree on ${path}. Shared handouts must be byte-identical.`,
         );
       }
       merged[path] = content;

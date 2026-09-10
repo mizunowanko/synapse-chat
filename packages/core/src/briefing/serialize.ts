@@ -1,8 +1,10 @@
 /**
- * `agent.spec.yaml` ↔ {@link Briefing}. Parsing validates, because a spec with
- * a missing `name` or a section without a heading renders a file that silently
- * says nothing — the failure would surface as an agent that quietly lost half
- * its instructions, which is the worst possible place to find it.
+ * `<name>.briefing.yaml` ↔ {@link Briefing}.
+ *
+ * Parsing validates, because a briefing with a missing `name` or a section
+ * without a heading hands out a file that silently says nothing. That failure
+ * surfaces as an agent which quietly lost half its instructions — the worst
+ * possible place to find it.
  */
 
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -109,7 +111,7 @@ function parseRules(value: unknown): BriefingRule[] {
 
 /**
  * `exactOptionalPropertyTypes` draws a line between "absent" and "present and
- * undefined", and the spec means the first one: an omitted `displayName` falls
+ * undefined", and a briefing means the first one: an omitted `displayName` falls
  * back to `name` at render time, and writing the key with `undefined` in it
  * would survive into the YAML as a dangling `displayName:`.
  */
@@ -123,7 +125,7 @@ function maybeFrontmatter(value: unknown, where: string): { providerFrontmatter?
 }
 
 export function parseBriefing(yaml: string): Briefing {
-  const table = record(parseYaml(yaml), "spec");
+  const table = record(parseYaml(yaml), "briefing");
   return {
     name: requiredString(table.name, "name"),
     ...optional("displayName", optionalString(table.displayName, "displayName")),
@@ -140,16 +142,16 @@ export function parseBriefing(yaml: string): Briefing {
  * prose lines survive a round trip instead of being rewrapped into something a
  * `git diff` cannot follow.
  */
-export function serializeBriefing(spec: Briefing): string {
+export function serializeBriefing(briefing: Briefing): string {
   return stringifyYaml(
     {
-      name: spec.name,
-      displayName: spec.displayName ?? spec.name,
-      role: spec.role ?? "",
-      sections: spec.sections,
-      skills: spec.skills,
-      subagents: spec.subagents,
-      rules: spec.rules,
+      name: briefing.name,
+      displayName: briefing.displayName ?? briefing.name,
+      role: briefing.role ?? "",
+      sections: briefing.sections,
+      skills: briefing.skills,
+      subagents: briefing.subagents,
+      rules: briefing.rules,
     },
     { lineWidth: 0 },
   );

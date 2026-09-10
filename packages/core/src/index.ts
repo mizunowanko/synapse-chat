@@ -27,29 +27,29 @@ export type {
 export type { ChatStorage } from "./storage.js";
 
 /**
- * Agent Spec — the provider-neutral description of an agent's instructions.
+ * Briefing — the provider-neutral statement of an agent's instructions.
  *
- * **Types only here; the implementation is `@synapse-chat/core/agent-spec`.**
+ * **Types only here; the implementation is `@synapse-chat/core/briefing`.**
  * This entry point is bundled for the browser (`@synapse-chat/react` imports it
- * from a Vite build), while `render`'s siblings read the filesystem and hash
- * with `node:crypto`. Re-exporting the values would drag `node:fs` into that
- * bundle and fail the build with "createHash is not exported by
- * __vite-browser-external" — which is what happened when they were.
+ * from a Vite build), while `collect()` reads the filesystem and the
+ * fingerprint hashes with `node:crypto`. Re-exporting the values would drag
+ * `node:fs` into that bundle and fail the build with "createHash is not
+ * exported by __vite-browser-external" — which is what happened when they were.
  *
  * Types are erased at compile time, so naming the vocabulary here costs the
- * browser nothing and keeps `AgentSpec` reachable from the package root for
- * anything that only needs to describe a spec rather than project one.
+ * browser nothing and keeps `Briefing` reachable from the package root for
+ * anything that only needs to describe a briefing rather than hand one out.
  */
 export type {
-  AgentSpec,
-  AgentSpecRule,
-  AgentSpecSection,
-  AgentSpecSkill,
-  AgentSpecSubagent,
+  Briefing,
+  BriefingRule,
+  BriefingSection,
+  BriefingSkill,
+  BriefingSubagent,
+  CollectResult,
+  HandoutFiles,
+  Layout,
+  LayoutName,
+  MarkedUpFile,
   ProviderFrontmatter,
-  ProviderLayout,
-  RenderTarget,
-  RenderedFiles,
-  AbsorbResult,
-  EditedFile,
-} from "./agent-spec/index.js";
+} from "./briefing/index.js";

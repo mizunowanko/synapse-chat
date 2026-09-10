@@ -1,21 +1,21 @@
 /**
- * Where each provider looks. This is the only module in `agent-spec/` that
- * knows a provider exists; everything else operates on the spec.
+ * Where each provider looks for its handout. This is the only module here that
+ * knows a provider exists; everything else operates on the briefing.
  *
- * The layout below is the measured one from issue #50 (Claude Code 2.1.212 /
- * agy 1.1.27 / Codex 0.153.4), including the two counter-intuitive results:
+ * The layouts below are measured, not guessed (Claude Code 2.1.212 / agy
+ * 1.1.27 / Codex 0.153.4), and include the two counter-intuitive results:
  *
  *  - **agy reads `AGENTS.md`, not `GEMINI.md`.** So agy and Codex share one
  *    instruction file, and per-provider wording is unrepresentable there.
  *  - **Codex reads `.agents/skills/` as well as `.codex/skills/`.** Skills are
- *    therefore emitted once, to `.agents/skills/`. Writing both would hand
+ *    therefore handed out once, to `.agents/skills/`. Writing both would give
  *    Codex every skill twice.
  */
 
 import type { LayoutName } from "./types.js";
 
 export interface Layout {
-  target: LayoutName;
+  name: LayoutName;
   /** Root instruction file. `claude` gets its own; `agents` and `codex` share one. */
   instructionFile: string;
   /** Directory holding `<name>/SKILL.md`. */
@@ -25,17 +25,17 @@ export interface Layout {
   /** `markdown` → `<name>.md` with YAML frontmatter; `toml` → `<name>.toml`. */
   subagentFormat: "markdown" | "toml";
   /**
-   * Where this provider *used* to keep always-on rules, for `importFrom` to
-   * pick up during migration. Nothing is rendered here any more: rules are
-   * folded into the instruction file (see `render.ts`). Codex has no such
-   * directory at all.
+   * Where this provider *used* to keep always-on rules, for `collect()` to pick
+   * up when bootstrapping. Nothing is handed out here any more — rules are
+   * folded into the instruction file (see `hand-out.ts`). Codex never had such
+   * a directory at all.
    */
   legacyRulesDir?: string;
 }
 
 export const LAYOUTS: Record<LayoutName, Layout> = {
   claude: {
-    target: "claude",
+    name: "claude",
     instructionFile: "CLAUDE.md",
     skillDir: ".claude/skills",
     subagentDir: ".claude/agents",
@@ -43,7 +43,7 @@ export const LAYOUTS: Record<LayoutName, Layout> = {
     legacyRulesDir: ".claude/rules",
   },
   agents: {
-    target: "agents",
+    name: "agents",
     instructionFile: "AGENTS.md",
     skillDir: ".agents/skills",
     subagentDir: ".agents/agents",
@@ -51,7 +51,7 @@ export const LAYOUTS: Record<LayoutName, Layout> = {
     legacyRulesDir: ".agents/rules",
   },
   codex: {
-    target: "codex",
+    name: "codex",
     instructionFile: "AGENTS.md",
     skillDir: ".agents/skills",
     subagentDir: ".codex/agents",
