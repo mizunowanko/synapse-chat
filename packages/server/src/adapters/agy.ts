@@ -1,4 +1,13 @@
-import type { CLIAdapter, SessionOptions, StreamMessage, TokenUsage } from "@synapse-chat/core";
+import type {
+  CLIAdapter,
+  SessionOptions,
+  StreamMessage,
+  SystemMessage,
+  TokenUsage,
+  ToolResultMessage,
+  ToolUseMessage,
+  ResultMessage,
+} from "@synapse-chat/core";
 import { safeJsonParse } from "../util/json-safe.js";
 
 /**
@@ -154,8 +163,7 @@ function parseAgyInit(raw: Record<string, unknown>): StreamMessage | null {
   if (permissionMode) meta.permissionMode = permissionMode;
   if (Array.isArray(init.tools)) meta.tools = init.tools;
 
-  const message: StreamMessage = { type: "system", subtype: "init" };
-  if (conversationId) message.sessionId = conversationId;
+  const message: SystemMessage = { type: "system", subtype: "init" };
   if (Object.keys(meta).length > 0) message.meta = meta;
   return message;
 }
@@ -203,17 +211,19 @@ function parseAgyToolStep(
 
   const output = toolInfo.output;
   if (state === "DONE" && output !== undefined) {
-    const message: StreamMessage = {
+    // ToolResultMessage has no `tool` field; the name rides along in `meta`
+    // so consumers can still pair a result with its call.
+    const message: ToolResultMessage = {
       type: "tool_result",
       content: typeof output === "string" ? output : JSON.stringify(output),
+      meta: { tool: toolName },
     };
     if (toolUseId) message.toolUseId = toolUseId;
-    message.tool = toolName;
     return message;
   }
 
   const parameters = asRecord(toolInfo.parameters);
-  const message: StreamMessage = {
+  const message: ToolUseMessage = {
     type: "tool_use",
     tool: toolName,
     content: parameters ? JSON.stringify(parameters, null, 2) : toolName,
@@ -239,12 +249,12 @@ function parseAgyResult(raw: Record<string, unknown>): StreamMessage | null {
     return { type: "error", content: error ?? "agy reported an error" };
   }
 
-  const message: StreamMessage = {
+  const message: ResultMessage = {
     type: "result",
     content: pickString(result, "response") ?? "",
   };
   const conversationId = pickString(result, "conversation_id");
-  if (conversationId) message.sessionId = conversationId;
+  if (conversationId) message.meta = { conversationId };
   const usage = extractAgyUsage(result);
   if (usage) message.usage = usage;
   return message;

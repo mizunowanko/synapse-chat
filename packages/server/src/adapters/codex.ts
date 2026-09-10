@@ -1,4 +1,13 @@
-import type { CLIAdapter, SessionOptions, StreamMessage, TokenUsage } from "@synapse-chat/core";
+import type {
+  CLIAdapter,
+  SessionOptions,
+  StreamMessage,
+  SystemMessage,
+  TokenUsage,
+  ToolResultMessage,
+  ToolUseMessage,
+  ResultMessage,
+} from "@synapse-chat/core";
 import { safeJsonParse } from "../util/json-safe.js";
 
 /**
@@ -143,11 +152,8 @@ function parseCodexThreadStarted(
   raw: Record<string, unknown>,
 ): StreamMessage | null {
   const threadId = pickString(raw, "thread_id");
-  const message: StreamMessage = { type: "system", subtype: "init" };
-  if (threadId) {
-    message.sessionId = threadId;
-    message.meta = { threadId };
-  }
+  const message: SystemMessage = { type: "system", subtype: "init" };
+  if (threadId) message.meta = { threadId };
   return message;
 }
 
@@ -212,7 +218,7 @@ function parseCodexCommand(
   const id = pickString(item, "id");
 
   if (!completed) {
-    const message: StreamMessage = {
+    const message: ToolUseMessage = {
       type: "tool_use",
       tool: "command_execution",
       content: command,
@@ -223,14 +229,17 @@ function parseCodexCommand(
   }
 
   const output = pickString(item, "aggregated_output") ?? "";
-  const message: StreamMessage = {
+  // ToolResultMessage has no `tool` field; the name and exit code ride along
+  // in `meta` so consumers can pair a result with its call.
+  const meta: Record<string, unknown> = { tool: "command_execution" };
+  const exitCode = item.exit_code;
+  if (typeof exitCode === "number") meta.exitCode = exitCode;
+  const message: ToolResultMessage = {
     type: "tool_result",
-    tool: "command_execution",
     content: output,
+    meta,
   };
   if (id) message.toolUseId = id;
-  const exitCode = item.exit_code;
-  if (typeof exitCode === "number") message.meta = { exitCode };
   return message;
 }
 
@@ -243,7 +252,7 @@ function parseCodexMcpToolCall(
 
   if (!completed) {
     const args = asRecord(item.arguments);
-    const message: StreamMessage = {
+    const message: ToolUseMessage = {
       type: "tool_use",
       tool,
       content: args ? JSON.stringify(args, null, 2) : tool,
@@ -254,10 +263,10 @@ function parseCodexMcpToolCall(
   }
 
   const result = item.result;
-  const message: StreamMessage = {
+  const message: ToolResultMessage = {
     type: "tool_result",
-    tool,
     content: typeof result === "string" ? result : JSON.stringify(result ?? null),
+    meta: { tool },
   };
   if (id) message.toolUseId = id;
   return message;
@@ -272,7 +281,7 @@ function parseCodexMcpToolCall(
 function parseCodexTurnCompleted(
   raw: Record<string, unknown>,
 ): StreamMessage | null {
-  const message: StreamMessage = { type: "result", content: "" };
+  const message: ResultMessage = { type: "result", content: "" };
   const usage = extractCodexUsage(raw);
   if (usage) message.usage = usage;
   return message;
