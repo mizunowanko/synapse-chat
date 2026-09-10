@@ -146,6 +146,7 @@ export function App() {
 | --- | --- |
 | [docs/cli-adapter-guide.md](./docs/cli-adapter-guide.md) | Implementing a `CLIAdapter` for a new CLI (annotated `claudeAdapter` walkthrough + worked example for a hypothetical `myllm` CLI). |
 | [docs/mcp-helper-guide.md](./docs/mcp-helper-guide.md) | Exposing a Backend HTTP API to CLI agents via `@synapse-chat/mcp`: `defineHttpTool`, `createMcpServer`, settings-file generators, confirmation guard. |
+| [docs/agent-briefing.md](./docs/agent-briefing.md) | **Agent Briefing**: one provider-neutral set of instructions handed out to Claude Code / agy / Codex. Vocabulary, the measured layout of each provider, and the `handOut` / `collect` round trip. |
 | [docs/ws-protocol.md](./docs/ws-protocol.md) | The WebSocket message protocol used by the example app. Recommended baseline for new apps; not enforced by the framework itself. |
 | [apps/example/README.md](./apps/example/README.md) | How to run the example, where to plug in your own backend, and how to add custom WS message handlers. |
 | TypeDoc API reference | Run `pnpm docs:api` from the repo root to generate HTML at `docs/api/`. The output is gitignored. |

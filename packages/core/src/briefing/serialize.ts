@@ -1,0 +1,158 @@
+/**
+ * `<name>.briefing.yaml` ↔ {@link Briefing}.
+ *
+ * Parsing validates, because a briefing with a missing `name` or a section
+ * without a heading hands out a file that silently says nothing. That failure
+ * surfaces as an agent which quietly lost half its instructions — the worst
+ * possible place to find it.
+ */
+
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+
+import type {
+  Briefing,
+  BriefingRule,
+  BriefingSection,
+  BriefingSkill,
+  BriefingSubagent,
+  ProviderFrontmatter,
+} from "./types.js";
+import { isLayoutName } from "./types.js";
+
+class BriefingError extends Error {
+  constructor(message: string) {
+    super(`briefing: ${message}`);
+    this.name = "BriefingError";
+  }
+}
+
+function record(value: unknown, where: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new BriefingError(`${where} must be a mapping.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function requiredString(value: unknown, where: string): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new BriefingError(`${where} is required and must be a non-empty string.`);
+  }
+  return value;
+}
+
+function optionalString(value: unknown, where: string): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") throw new BriefingError(`${where} must be a string.`);
+  return value;
+}
+
+function list(value: unknown, where: string): unknown[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new BriefingError(`${where} must be a list.`);
+  return value;
+}
+
+function providerFrontmatter(value: unknown, where: string): ProviderFrontmatter | undefined {
+  if (value === undefined || value === null) return undefined;
+  const table = record(value, where);
+  const out: ProviderFrontmatter = {};
+  for (const [layoutName, keys] of Object.entries(table)) {
+    if (!isLayoutName(layoutName)) {
+      throw new BriefingError(`${where}.${layoutName} is not a known layout (claude / agents / codex).`);
+    }
+    out[layoutName] = record(keys, `${where}.${layoutName}`);
+  }
+  return out;
+}
+
+function parseSections(value: unknown): BriefingSection[] {
+  return list(value, "sections").map((entry, i) => {
+    const table = record(entry, `sections[${i}]`);
+    return {
+      heading: requiredString(table.heading, `sections[${i}].heading`),
+      body: optionalString(table.body, `sections[${i}].body`) ?? "",
+    };
+  });
+}
+
+function parseSkills(value: unknown): BriefingSkill[] {
+  return list(value, "skills").map((entry, i) => {
+    const table = record(entry, `skills[${i}]`);
+    return {
+      name: requiredString(table.name, `skills[${i}].name`),
+      description: optionalString(table.description, `skills[${i}].description`) ?? "",
+      body: optionalString(table.body, `skills[${i}].body`) ?? "",
+      ...maybeFrontmatter(table.providerFrontmatter, `skills[${i}].providerFrontmatter`),
+    };
+  });
+}
+
+function parseSubagents(value: unknown): BriefingSubagent[] {
+  return list(value, "subagents").map((entry, i) => {
+    const table = record(entry, `subagents[${i}]`);
+    return {
+      name: requiredString(table.name, `subagents[${i}].name`),
+      description: optionalString(table.description, `subagents[${i}].description`) ?? "",
+      instructions: optionalString(table.instructions, `subagents[${i}].instructions`) ?? "",
+      ...maybeFrontmatter(table.providerFrontmatter, `subagents[${i}].providerFrontmatter`),
+    };
+  });
+}
+
+function parseRules(value: unknown): BriefingRule[] {
+  return list(value, "rules").map((entry, i) => {
+    const table = record(entry, `rules[${i}]`);
+    return {
+      name: requiredString(table.name, `rules[${i}].name`),
+      body: optionalString(table.body, `rules[${i}].body`) ?? "",
+    };
+  });
+}
+
+/**
+ * `exactOptionalPropertyTypes` draws a line between "absent" and "present and
+ * undefined", and a briefing means the first one: an omitted `displayName` falls
+ * back to `name` at render time, and writing the key with `undefined` in it
+ * would survive into the YAML as a dangling `displayName:`.
+ */
+function optional<K extends string>(key: K, value: string | undefined): Partial<Record<K, string>> {
+  return value === undefined ? {} : ({ [key]: value } as Record<K, string>);
+}
+
+function maybeFrontmatter(value: unknown, where: string): { providerFrontmatter?: ProviderFrontmatter } {
+  const parsed = providerFrontmatter(value, where);
+  return parsed ? { providerFrontmatter: parsed } : {};
+}
+
+export function parseBriefing(yaml: string): Briefing {
+  const table = record(parseYaml(yaml), "briefing");
+  return {
+    name: requiredString(table.name, "name"),
+    ...optional("displayName", optionalString(table.displayName, "displayName")),
+    ...optional("role", optionalString(table.role, "role")),
+    sections: parseSections(table.sections),
+    skills: parseSkills(table.skills),
+    subagents: parseSubagents(table.subagents),
+    rules: parseRules(table.rules),
+  };
+}
+
+/**
+ * Serializes back to YAML. `lineWidth: 0` disables folding so long Japanese
+ * prose lines survive a round trip instead of being rewrapped into something a
+ * `git diff` cannot follow.
+ */
+export function serializeBriefing(briefing: Briefing): string {
+  return stringifyYaml(
+    {
+      name: briefing.name,
+      displayName: briefing.displayName ?? briefing.name,
+      role: briefing.role ?? "",
+      sections: briefing.sections,
+      skills: briefing.skills,
+      subagents: briefing.subagents,
+      rules: briefing.rules,
+    },
+    { lineWidth: 0 },
+  );
+}

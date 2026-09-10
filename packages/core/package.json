@@ -19,6 +19,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./briefing": {
+      "types": "./dist/briefing/index.d.ts",
+      "default": "./dist/briefing/index.js"
     }
   },
   "files": [
@@ -27,6 +31,9 @@
     "!src/**/*.test.ts"
   ],
   "sideEffects": false,
+  "dependencies": {
+    "yaml": "^2.8.3"
+  },
   "scripts": {
     "build": "tsc -b",
     "clean": "rm -rf dist *.tsbuildinfo",
@@ -37,7 +44,8 @@
     "synapse-chat",
     "types",
     "cli-adapter",
-    "stream-json"
+    "stream-json",
+    "briefing"
   ],
   "publishConfig": {
     "access": "public"
