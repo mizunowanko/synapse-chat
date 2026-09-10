@@ -398,7 +398,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
           adapter.parseOutput(line) as Record<string, unknown> | null
       : undefined;
     attachStdoutProcessor(proc, shortId, logFilePath, callbacks, parseLine);
-    attachStderrProcessor(proc, shortId, callbacks);
+    attachStderrProcessor(proc, shortId, callbacks, adapter?.benignStderrPatterns);
 
     proc.on("exit", (code) => {
       console.log(`[proc:${shortId}] exited (code=${code})`);

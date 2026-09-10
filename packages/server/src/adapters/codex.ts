@@ -349,10 +349,19 @@ function pickNumber(
   return typeof value === "number" ? value : undefined;
 }
 
+/**
+ * `codex exec` narrates on stderr during a perfectly healthy run. Without this
+ * filter every session would raise an error event on its very first line.
+ */
+const CODEX_BENIGN_STDERR_PATTERNS: RegExp[] = [
+  /Reading additional input from stdin/i,
+];
+
 export const codexAdapter: CLIAdapter = {
   command: process.env.CODEX_CLI_PATH ?? "codex",
   buildArgs: buildCodexArgs,
   parseOutput: parseCodexOutput,
   rateLimitPatterns: CODEX_RATE_LIMIT_PATTERNS,
   retryableErrorPatterns: CODEX_RETRYABLE_ERROR_PATTERNS,
+  benignStderrPatterns: CODEX_BENIGN_STDERR_PATTERNS,
 };

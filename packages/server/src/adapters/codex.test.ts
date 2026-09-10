@@ -186,3 +186,24 @@ describe("codexAdapter", () => {
     ).toBe(true);
   });
 });
+
+describe("codexAdapter.benignStderrPatterns", () => {
+  const isBenign = (line: string) =>
+    (codexAdapter.benignStderrPatterns ?? []).some((p) => p.test(line));
+
+  it("treats the stdin notice as informational, not an error", () => {
+    // codex exec prints this on every run, even when the prompt came in as a
+    // positional argument. Surfacing it as an error would make every healthy
+    // session look like a failing one.
+    expect(isBenign("Reading additional input from stdin...")).toBe(true);
+  });
+
+  it("does not swallow real stderr failures", () => {
+    expect(isBenign("Error: model overloaded")).toBe(false);
+    expect(
+      isBenign(
+        "Not inside a trusted directory and --skip-git-repo-check was not specified.",
+      ),
+    ).toBe(false);
+  });
+});

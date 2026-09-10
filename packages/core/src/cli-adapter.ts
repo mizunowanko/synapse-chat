@@ -75,6 +75,20 @@ export interface CLIAdapter {
   retryableErrorPatterns: RegExp[];
 
   /**
+   * Patterns matching stderr lines that are informational rather than
+   * failures, and should not be surfaced as errors.
+   *
+   * Some CLIs narrate on stderr during normal operation — `codex exec` prints
+   * `Reading additional input from stdin...` on every single run. Without this
+   * filter each such line becomes an `error` event, so a healthy session looks
+   * like a failing one.
+   *
+   * Optional: when unset, every non-retryable stderr line is treated as an
+   * error, which is the historical behavior.
+   */
+  benignStderrPatterns?: RegExp[];
+
+  /**
    * Optional hook invoked by the spawner before the CLI starts, to write
    * CLI-specific config into the working directory (for example, MCP
    * server entries into `.mcp.json` or `.gemini/settings.json`).
