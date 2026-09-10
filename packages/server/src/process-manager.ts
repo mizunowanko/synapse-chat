@@ -273,6 +273,11 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
       sessionOptions.disallowedTools = options.disallowedTools;
     if (options.autoApprove !== undefined)
       sessionOptions.autoApprove = options.autoApprove;
+    if (options.model !== undefined) sessionOptions.model = options.model;
+    // Forwarded so adapters can translate it into a workspace flag. `agy`
+    // needs this: without `--add-dir` it reports "no active workspace is
+    // currently set" and silently reads no files at all.
+    sessionOptions.cwd = options.cwd;
     const args = adapter.buildArgs(sessionOptions);
 
     const proc = spawn(adapter.command, args, {
@@ -393,7 +398,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
           adapter.parseOutput(line) as Record<string, unknown> | null
       : undefined;
     attachStdoutProcessor(proc, shortId, logFilePath, callbacks, parseLine);
-    attachStderrProcessor(proc, shortId, callbacks);
+    attachStderrProcessor(proc, shortId, callbacks, adapter?.benignStderrPatterns);
 
     proc.on("exit", (code) => {
       console.log(`[proc:${shortId}] exited (code=${code})`);

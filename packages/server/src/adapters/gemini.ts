@@ -1,5 +1,27 @@
 import type { CLIAdapter, SessionOptions, StreamMessage, TokenUsage } from "@synapse-chat/core";
 
+/**
+ * Adapter for **Google's `gemini` CLI** — *not* the Antigravity CLI.
+ *
+ * ## Known limitations
+ *
+ * This adapter covers only `--prompt` and `--yolo`. In particular it does
+ * **not** support:
+ *
+ * - **Structured streaming.** No `--output-format stream-json` is requested,
+ *   so {@link parseGeminiOutput} is parsing best-effort plain text and falls
+ *   back to `{ type: "assistant" }` for anything it cannot decode.
+ * - **Session resume.** {@link SessionOptions.resumeSessionId} is ignored;
+ *   every dispatch starts a fresh conversation.
+ * - `systemPrompt`, `allowedTools`, `disallowedTools`, `cwd`, `model` — all
+ *   silently dropped.
+ *
+ * **For Gemini-backed sessions prefer {@link ../agy.js | agyAdapter}**, which
+ * drives the Antigravity CLI (`agy`) and does support stream-json output and
+ * resume. This adapter is kept for callers still pointing at the `gemini`
+ * binary.
+ */
+
 const GEMINI_RATE_LIMIT_PATTERNS: RegExp[] = [
   /\b429\b/,
   /RESOURCE_EXHAUSTED/,

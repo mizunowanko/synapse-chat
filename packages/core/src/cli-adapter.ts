@@ -16,6 +16,16 @@ export interface SessionOptions {
   cwd?: string;
   env?: Record<string, string>;
   /**
+   * Model identifier to run the turn with, passed through to the CLI's model
+   * flag (`--model` for Claude and `agy`, `-m` for `codex`).
+   *
+   * Optional and adapter-specific: the accepted values differ per CLI (e.g.
+   * `gemini-3.8-flash-low` for `agy`, `gpt-5.6-luna` for `codex`). Adapters
+   * omit the flag entirely when this is unset, letting the CLI apply its own
+   * default.
+   */
+  model?: string;
+  /**
    * Auto-approve all tool/permission prompts. Translates to CLI-specific flags:
    * - Claude: `--dangerously-skip-permissions`
    * - Gemini: `--yolo`
@@ -63,6 +73,20 @@ export interface CLIAdapter {
 
   /** Patterns that indicate a transient error worth retrying. */
   retryableErrorPatterns: RegExp[];
+
+  /**
+   * Patterns matching stderr lines that are informational rather than
+   * failures, and should not be surfaced as errors.
+   *
+   * Some CLIs narrate on stderr during normal operation — `codex exec` prints
+   * `Reading additional input from stdin...` on every single run. Without this
+   * filter each such line becomes an `error` event, so a healthy session looks
+   * like a failing one.
+   *
+   * Optional: when unset, every non-retryable stderr line is treated as an
+   * error, which is the historical behavior.
+   */
+  benignStderrPatterns?: RegExp[];
 
   /**
    * Optional hook invoked by the spawner before the CLI starts, to write

@@ -70,6 +70,7 @@ export function attachStderrProcessor(
   proc: ChildProcess,
   shortId: string,
   callbacks: StreamCallbacks,
+  benignPatterns?: RegExp[],
 ): void {
   let stderrBuffer = "";
   proc.stderr?.on("data", (chunk: Buffer) => {
@@ -81,6 +82,8 @@ export function attachStderrProcessor(
       const text = line.trim();
       if (!text) continue;
       console.error(`[proc:${shortId}] stderr: ${text.slice(0, 200)}`);
+      // Informational chatter some CLIs emit during a healthy run.
+      if (benignPatterns?.some((pattern) => pattern.test(text))) continue;
       if (isRetryableError(text)) {
         callbacks.onRetryableError();
       } else {
