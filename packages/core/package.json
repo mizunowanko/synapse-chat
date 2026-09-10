@@ -19,6 +19,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./agent-spec": {
+      "types": "./dist/agent-spec/index.d.ts",
+      "default": "./dist/agent-spec/index.js"
     }
   },
   "files": [
