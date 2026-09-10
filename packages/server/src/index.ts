@@ -46,7 +46,8 @@ export type {
   TokenUsage,
 } from "@synapse-chat/core";
 
-// CLI adapters (Claude, Gemini, Gemma). Re-exported via the "./adapters" subpath too.
+// CLI adapters (Claude, agy, Codex, Gemini, Gemma). Re-exported via the
+// "./adapters" subpath too.
 export {
   claudeAdapter,
   createClaudeAdapter,
@@ -54,6 +55,13 @@ export {
   buildClaudeArgs,
   parseClaudeOutput,
   formatClaudeInput,
+  agyAdapter,
+  buildAgyArgs,
+  parseAgyOutput,
+  formatAgyInput,
+  codexAdapter,
+  buildCodexArgs,
+  parseCodexOutput,
   geminiAdapter,
   buildGeminiArgs,
   parseGeminiOutput,

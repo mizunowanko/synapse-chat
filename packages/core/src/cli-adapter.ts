@@ -16,6 +16,16 @@ export interface SessionOptions {
   cwd?: string;
   env?: Record<string, string>;
   /**
+   * Model identifier to run the turn with, passed through to the CLI's model
+   * flag (`--model` for Claude and `agy`, `-m` for `codex`).
+   *
+   * Optional and adapter-specific: the accepted values differ per CLI (e.g.
+   * `gemini-3.8-flash-low` for `agy`, `gpt-5.6-luna` for `codex`). Adapters
+   * omit the flag entirely when this is unset, letting the CLI apply its own
+   * default.
+   */
+  model?: string;
+  /**
    * Auto-approve all tool/permission prompts. Translates to CLI-specific flags:
    * - Claude: `--dangerously-skip-permissions`
    * - Gemini: `--yolo`
