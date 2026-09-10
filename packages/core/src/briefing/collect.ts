@@ -7,17 +7,22 @@
  * `<name>.briefing.yaml` to fix a sentence — they fix the `CLAUDE.md` that is
  * already in front of them.
  *
- * **Only marked-up handouts are read.** The fingerprint says what we produced;
- * a handout that still hashes to its own fingerprint contains no human input,
- * and re-parsing it could only introduce drift. Collecting twice with nothing
- * written in between is therefore a literal no-op rather than an approximate
- * one.
+ * A handout is read back when **somebody wrote on it, or the briefing has no
+ * entry for what it holds.** Both halves matter:
  *
- * **The same call bootstraps a directory that was never handed out.** A file
- * carrying no fingerprint is marked-up by definition, so pointing `collect()`
- * at a hand-authored `agents/Amanatsu/` reads all of it — which is exactly what
- * a migration needs, and the reason this is one function instead of two. Pair
- * it with {@link emptyBriefing} when there is nothing to collect *into* yet.
+ *  - The fingerprint says what we produced. A handout that still hashes to its
+ *    own fingerprint holds no human input, so re-parsing it could only
+ *    introduce drift. Collecting twice with nothing written in between is a
+ *    literal no-op rather than an approximate one.
+ *  - A fingerprint only means "we generated this from *a* briefing" — never
+ *    "the briefing in your hand already covers it". A skill this briefing has
+ *    no entry for is taken in whichever way it got there, because skipping it
+ *    would drop the only copy on the floor.
+ *
+ * Together they make one call do the migration too: point `collect()` at a
+ * hand-authored `agents/Amanatsu/` with {@link emptyBriefing} and every file
+ * reads as new, which is the whole of what an import needs. That is why this is
+ * one function and not two.
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -115,6 +120,10 @@ export function collect(briefing: Briefing, layoutName: LayoutName, dir: string)
   const layout = LAYOUTS[layoutName];
   const next: Briefing = structuredClone(briefing);
   const collected: string[] = [];
+  // Nothing in the briefing describes an instruction file yet, so whatever is
+  // on disk is new rather than stale — even if we are the ones who wrote it.
+  const instructionsAreNew =
+    next.sections.length === 0 && next.rules.length === 0 && (next.role ?? "").trim() === "";
 
   // Legacy rule files first: they never appear in a handout, so they only ever
   // matter while bootstrapping a directory that predates this module. What they
@@ -122,7 +131,7 @@ export function collect(briefing: Briefing, layoutName: LayoutName, dir: string)
   // rules rather than sections.
   const legacyRules = readLegacyRules(layout, dir, collected);
 
-  const instructions = readMarkedUp(dir, layout.instructionFile);
+  const instructions = readCollectable(dir, layout.instructionFile, instructionsAreNew);
   if (instructions !== null) {
     applyInstructions(next, instructions, legacyRules);
     collected.push(layout.instructionFile);
@@ -136,13 +145,24 @@ export function collect(briefing: Briefing, layoutName: LayoutName, dir: string)
   return { briefing: next, collected };
 }
 
-/** Returns the fingerprint-free content of a handout iff somebody wrote on it. */
-function readMarkedUp(dir: string, relative: string): string | null {
+/**
+ * The fingerprint-free content of a handout, if there is any reason to read it.
+ *
+ * `isNew` is the escape hatch for things the briefing has no entry for, where a
+ * valid fingerprint proves only that *some* briefing produced the file — not
+ * that the one in our hand still knows about it.
+ */
+function readCollectable(dir: string, relative: string, isNew: boolean): string | null {
   const absolute = join(dir, relative);
   if (!existsSync(absolute)) return null;
   const raw = readFileSync(absolute, "utf-8");
-  if (!isMarkedUp(raw)) return null;
+  if (!isNew && !isMarkedUp(raw)) return null;
   return stripFingerprint(raw).content;
+}
+
+/** Returns the fingerprint-free content of a handout iff somebody wrote on it. */
+function readMarkedUp(dir: string, relative: string): string | null {
+  return readCollectable(dir, relative, false);
 }
 
 function readLegacyRules(layout: Layout, dir: string, collected: string[]): BriefingRule[] {
@@ -271,12 +291,12 @@ function collectSkills(
     return toSkill(skill.name, content, layoutName, skill.providerFrontmatter);
   });
 
-  // Directories somebody added by hand. They carry no fingerprint, so they read
-  // as marked-up and are taken in whole.
+  // Skills the briefing has no entry for — added by hand, or left over from a
+  // briefing we no longer hold. Either way this is the only copy.
   for (const name of listSubdirs(join(dir, layout.skillDir))) {
     if (known.has(name)) continue;
     const relative = relativeOf(name);
-    const content = readMarkedUp(dir, relative);
+    const content = readCollectable(dir, relative, true);
     if (content === null) continue;
     collected.push(relative);
     updated.push(toSkill(name, content, layoutName, undefined));
@@ -325,7 +345,7 @@ function collectSubagents(
     const name = basename(file, suffix);
     if (known.has(name)) continue;
     const relative = relativeOf(name);
-    const content = readMarkedUp(dir, relative);
+    const content = readCollectable(dir, relative, true);
     if (content === null) continue;
     collected.push(relative);
     updated.push(parse(name, content, layoutName, undefined));

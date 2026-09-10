@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { stripFingerprint } from "./markdown.js";
-import { render, handOutAll, handOutInstructions } from "./hand-out.js";
+import { stripFingerprint } from "./fingerprint.js";
+import { handOut, handOutAll, handOutInstructions } from "./hand-out.js";
 import type { Briefing } from "./types.js";
 
-const spec: Briefing = {
+const briefing: Briefing = {
   name: "Amanatsu",
   displayName: "アマナツ",
   role: "Atelier vault の分析担当。",
@@ -30,44 +30,44 @@ const spec: Briefing = {
   rules: [{ name: "常時ルール", body: "推測で数字を出さない。\n" }],
 };
 
-describe("render", () => {
-  it("emits the expected file set per target", () => {
-    expect(Object.keys(handOut(spec, "claude")).sort()).toEqual([
+describe("handOut", () => {
+  it("emits the expected file set per layout", () => {
+    expect(Object.keys(handOut(briefing, "claude")).sort()).toEqual([
       ".claude/agents/number-cruncher.md",
       ".claude/skills/analytics-inspect/SKILL.md",
       "CLAUDE.md",
     ]);
-    expect(Object.keys(handOut(spec, "agents")).sort()).toEqual([
+    expect(Object.keys(handOut(briefing, "agents")).sort()).toEqual([
       ".agents/agents/number-cruncher.md",
       ".agents/skills/analytics-inspect/SKILL.md",
       "AGENTS.md",
     ]);
-    // Codex reads `.agents/skills/` too, so skills are emitted once and shared.
-    expect(Object.keys(handOut(spec, "codex")).sort()).toEqual([
+    // Codex reads `.agents/skills/` too, so skills are handed out once and shared.
+    expect(Object.keys(handOut(briefing, "codex")).sort()).toEqual([
       ".agents/skills/analytics-inspect/SKILL.md",
       ".codex/agents/number-cruncher.toml",
       "AGENTS.md",
     ]);
   });
 
-  it("renders CLAUDE.md and AGENTS.md byte-identically", () => {
+  it("hands out CLAUDE.md and AGENTS.md byte-identically", () => {
     // The load-bearing invariant: agy and Codex share AGENTS.md, so any
     // per-provider wording is both unrepresentable and self-revealing.
-    expect(handOut(spec, "claude")["CLAUDE.md"]).toBe(handOut(spec, "agents")["AGENTS.md"]);
-    expect(handOut(spec, "agents")["AGENTS.md"]).toBe(handOut(spec, "codex")["AGENTS.md"]);
+    expect(handOut(briefing, "claude")["CLAUDE.md"]).toBe(handOut(briefing, "agents")["AGENTS.md"]);
+    expect(handOut(briefing, "agents")["AGENTS.md"]).toBe(handOut(briefing, "codex")["AGENTS.md"]);
   });
 
   it("folds rules into the instruction body, and emits no rules directory", () => {
-    const body = handOutInstructions(spec);
+    const body = handOutInstructions(briefing);
     expect(body).toContain("## 常時ルール");
     expect(body).toContain("推測で数字を出さない。");
-    for (const target of ["claude", "agents", "codex"] as const) {
-      expect(Object.keys(handOut(spec, target)).some((p) => p.includes("/rules/"))).toBe(false);
+    for (const layout of ["claude", "agents", "codex"] as const) {
+      expect(Object.keys(handOut(briefing, layout)).some((p) => p.includes("/rules/"))).toBe(false);
     }
   });
 
   it("places the title, role and sections in order", () => {
-    expect(stripFingerprint(handOut(spec, "claude")["CLAUDE.md"]).content).toBe(
+    expect(stripFingerprint(handOut(briefing, "claude")["CLAUDE.md"]).content).toBe(
       [
         "# アマナツ",
         "",
@@ -89,9 +89,9 @@ describe("render", () => {
     );
   });
 
-  it("applies provider frontmatter only to its own target", () => {
-    const claudeSkill = handOut(spec, "claude")[".claude/skills/analytics-inspect/SKILL.md"];
-    const agySkill = handOut(spec, "agents")[".agents/skills/analytics-inspect/SKILL.md"];
+  it("applies provider frontmatter only to its own layout", () => {
+    const claudeSkill = handOut(briefing, "claude")[".claude/skills/analytics-inspect/SKILL.md"];
+    const agySkill = handOut(briefing, "agents")[".agents/skills/analytics-inspect/SKILL.md"];
     expect(claudeSkill).toContain("allowed-tools: Read, Grep");
     expect(agySkill).not.toContain("allowed-tools");
     // The body is identical regardless; only the harness header differs.
@@ -100,7 +100,7 @@ describe("render", () => {
   });
 
   it("writes Codex subagents as TOML with escaped instructions", () => {
-    const toml = handOut(spec, "codex")[".codex/agents/number-cruncher.toml"];
+    const toml = handOut(briefing, "codex")[".codex/agents/number-cruncher.toml"];
     expect(toml).toContain('name = "number-cruncher"');
     expect(toml).toContain('description = "集計を回す。"');
     expect(toml).toContain("developer_instructions = \"\"\"");
@@ -111,13 +111,13 @@ describe("render", () => {
   });
 
   it("falls back to name when displayName is absent", () => {
-    expect(handOutInstructions({ ...spec, displayName: undefined }).split("\n")[0]).toBe("# Amanatsu");
+    expect(handOutInstructions({ ...briefing, displayName: undefined }).split("\n")[0]).toBe("# Amanatsu");
   });
 });
 
 describe("handOutAll", () => {
-  it("merges the three targets into one tree", () => {
-    expect(Object.keys(handOutAll(spec)).sort()).toEqual([
+  it("merges the three layouts into one tree", () => {
+    expect(Object.keys(handOutAll(briefing)).sort()).toEqual([
       ".agents/agents/number-cruncher.md",
       ".agents/skills/analytics-inspect/SKILL.md",
       ".claude/agents/number-cruncher.md",
@@ -128,14 +128,14 @@ describe("handOutAll", () => {
     ]);
   });
 
-  it("throws when two targets disagree on a shared path", () => {
+  it("throws when two layouts disagree on a shared path", () => {
     // Guard against a future edit reintroducing per-provider wording: agy and
     // Codex would then silently race to write AGENTS.md.
     const diverging: Briefing = {
-      ...spec,
+      ...briefing,
       skills: [
         {
-          ...spec.skills[0],
+          ...briefing.skills[0],
           providerFrontmatter: { agents: { extra: 1 }, codex: { extra: 2 } },
         },
       ],

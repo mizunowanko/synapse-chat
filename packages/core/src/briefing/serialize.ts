@@ -56,11 +56,11 @@ function providerFrontmatter(value: unknown, where: string): ProviderFrontmatter
   if (value === undefined || value === null) return undefined;
   const table = record(value, where);
   const out: ProviderFrontmatter = {};
-  for (const [target, keys] of Object.entries(table)) {
-    if (!isLayoutName(target)) {
-      throw new BriefingError(`${where}.${target} is not a known target (claude / agents / codex).`);
+  for (const [layoutName, keys] of Object.entries(table)) {
+    if (!isLayoutName(layoutName)) {
+      throw new BriefingError(`${where}.${layoutName} is not a known layout (claude / agents / codex).`);
     }
-    out[target] = record(keys, `${where}.${target}`);
+    out[layoutName] = record(keys, `${where}.${layoutName}`);
   }
   return out;
 }
