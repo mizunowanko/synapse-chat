@@ -27,6 +27,9 @@
     "!src/**/*.test.ts"
   ],
   "sideEffects": false,
+  "dependencies": {
+    "yaml": "^2.8.3"
+  },
   "scripts": {
     "build": "tsc -b",
     "clean": "rm -rf dist *.tsbuildinfo",
@@ -37,7 +40,8 @@
     "synapse-chat",
     "types",
     "cli-adapter",
-    "stream-json"
+    "stream-json",
+    "agent-spec"
   ],
   "publishConfig": {
     "access": "public"

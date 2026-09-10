@@ -25,3 +25,39 @@ export type {
   SendResult,
 } from "./process-manager-like.js";
 export type { ChatStorage } from "./storage.js";
+
+export type {
+  AgentSpec,
+  AgentSpecRule,
+  AgentSpecSection,
+  AgentSpecSkill,
+  AgentSpecSubagent,
+  ProviderFrontmatter,
+  ProviderLayout,
+  RenderTarget,
+  RenderedFiles,
+  AbsorbResult,
+  EditedFile,
+} from "./agent-spec/index.js";
+export {
+  PROVIDER_LAYOUTS,
+  RENDER_TARGETS,
+  absorb,
+  detectEdits,
+  digestOf,
+  fromToml,
+  importFrom,
+  isHandEdited,
+  isRenderTarget,
+  parseFrontmatter,
+  parseSpec,
+  render,
+  renderAll,
+  renderInstructions,
+  serializeSpec,
+  splitSections,
+  stripMarker,
+  toToml,
+  withFrontmatter,
+  withMarker,
+} from "./agent-spec/index.js";
