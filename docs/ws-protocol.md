@@ -78,9 +78,9 @@ interface StreamFrame {
 | `message.type` | Meaning |
 | --- | --- |
 | `assistant` | Streamed assistant text. May arrive in many small chunks; UIs can append to the previous bubble or render each frame independently. |
-| `user` | Echo of a user submission (helpful when the same socket is shared between multiple browser windows). |
+| `user` | Echo of a user submission (helpful when the same socket is shared between multiple browser windows). Never produced by `parseStreamMessage`: Claude's `user` turns exist to carry `tool_result` blocks, and echoing their text would double the operator's own prompt. |
 | `tool_use` | The model invoked a tool. `tool` and `toolInput` describe the call. Pair with the matching `tool_result` via `toolUseId`. |
-| `tool_result` | Result delivered back to the model. |
+| `tool_result` | Result delivered back to the model. `meta.isError` is `true` when the tool raised. Non-text results (e.g. an image `Read`) arrive with no `content` — the bytes are deliberately not stringified. |
 | `system` | Free-form system event (status badges, init banners). Apps look at `subtype` / `meta` for routing. |
 | `result` | End-of-turn marker (token usage, cost, etc.). |
 | `error` | The CLI surfaced an error. |
