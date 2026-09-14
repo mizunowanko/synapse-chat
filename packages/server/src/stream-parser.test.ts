@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import type { StreamMessage } from "@synapse-chat/core";
 import { describe, it, expect } from "vitest";
 import {
   extractResultUsage,
@@ -90,6 +92,258 @@ describe("parseStreamMessage", () => {
         content: 42,
       });
       expect(result).toBeNull();
+    });
+  });
+
+
+  // === user (Claude wraps tool_result in a user turn) ===
+
+  describe("user", () => {
+    it("extracts a tool_result block from a Claude user turn", () => {
+      const result = parseStreamMessage({
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            {
+              tool_use_id: "toolu_017ABtTje7XgM4qEAZMgbxNn",
+              type: "tool_result",
+              content: "1\thello world\n2\t",
+            },
+          ],
+        },
+        parent_tool_use_id: null,
+      });
+      expect(result).toEqual({
+        type: "tool_result",
+        content: "1\thello world\n2\t",
+        toolUseId: "toolu_017ABtTje7XgM4qEAZMgbxNn",
+        timestamp: expect.any(Number),
+      });
+    });
+
+    it("flags is_error via meta and keeps the error text as content", () => {
+      const result = parseStreamMessage({
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              content: "File does not exist.",
+              is_error: true,
+              tool_use_id: "toolu_01Lg4PMmCDpNnBnFmjiBdNcZ",
+            },
+          ],
+        },
+      });
+      expect(result).toEqual({
+        type: "tool_result",
+        content: "File does not exist.",
+        toolUseId: "toolu_01Lg4PMmCDpNnBnFmjiBdNcZ",
+        meta: { isError: true },
+        timestamp: expect.any(Number),
+      });
+    });
+
+    it("omits meta when is_error is false", () => {
+      const result = parseStreamMessage({
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            { type: "tool_result", content: "ok", tool_use_id: "t1", is_error: false },
+          ],
+        },
+      });
+      expect(result).toEqual({
+        type: "tool_result",
+        content: "ok",
+        toolUseId: "t1",
+        timestamp: expect.any(Number),
+      });
+    });
+
+    it("drops the operator's own prompt sent as a plain string", () => {
+      const result = parseStreamMessage({
+        type: "user",
+        message: { role: "user", content: "what is 2 + 2?" },
+      });
+      expect(result).toBeNull();
+    });
+
+    it("drops the operator's own prompt sent as text blocks", () => {
+      const result = parseStreamMessage({
+        type: "user",
+        message: {
+          role: "user",
+          content: [{ type: "text", text: "what is 2 + 2?" }],
+        },
+      });
+      expect(result).toBeNull();
+    });
+
+    it("drops a user turn with no content", () => {
+      expect(parseStreamMessage({ type: "user" })).toBeNull();
+      expect(parseStreamMessage({ type: "user", message: {} })).toBeNull();
+      expect(
+        parseStreamMessage({ type: "user", message: { content: [] } }),
+      ).toBeNull();
+    });
+
+    it("picks the tool_result even when text blocks precede it", () => {
+      const result = parseStreamMessage({
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            { type: "text", text: "ignore me" },
+            { type: "tool_result", content: "picked", tool_use_id: "t2" },
+          ],
+        },
+      });
+      expect(result).toEqual({
+        type: "tool_result",
+        content: "picked",
+        toolUseId: "t2",
+        timestamp: expect.any(Number),
+      });
+    });
+
+    it("flattens a nested content-block array to its text blocks", () => {
+      const result = parseStreamMessage({
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "t3",
+              content: [
+                { type: "text", text: "line 1" },
+                { type: "text", text: "line 2" },
+              ],
+            },
+          ],
+        },
+      });
+      expect(result).toEqual({
+        type: "tool_result",
+        content: "line 1\nline 2",
+        toolUseId: "t3",
+        timestamp: expect.any(Number),
+      });
+    });
+
+    it("emits a contentless tool_result rather than dumping image base64", () => {
+      const result = parseStreamMessage({
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "t4",
+              content: [
+                { type: "image", source: { type: "base64", data: "AAAA" } },
+              ],
+            },
+          ],
+        },
+      });
+      expect(result).toEqual({
+        type: "tool_result",
+        toolUseId: "t4",
+        timestamp: expect.any(Number),
+      });
+    });
+
+    it("drops a tool_result with neither content nor tool_use_id", () => {
+      const result = parseStreamMessage({
+        type: "user",
+        message: { role: "user", content: [{ type: "tool_result", content: "" }] },
+      });
+      expect(result).toBeNull();
+    });
+
+    it("keeps a subagent sidechain result (parent_tool_use_id non-null)", () => {
+      const result = parseStreamMessage({
+        type: "user",
+        message: {
+          role: "user",
+          content: [{ type: "tool_result", content: "from sidechain", tool_use_id: "t5" }],
+        },
+        parent_tool_use_id: "toolu_parent",
+      });
+      expect(result).toEqual({
+        type: "tool_result",
+        content: "from sidechain",
+        toolUseId: "t5",
+        timestamp: expect.any(Number),
+      });
+    });
+  });
+
+  // === real Claude CLI session (regression fixture) ===
+
+  describe("claude stream-json fixture", () => {
+    // Captured verbatim from
+    //   claude -p --output-format stream-json --verbose --model claude-haiku-4-5
+    //     --allowed-tools Read
+    // reading one existing and one missing file. Only the `init` line was
+    // redacted (local tool / MCP inventory removed); every other line is as the
+    // CLI wrote it.
+    const lines = readFileSync(
+      new URL("./test-fixtures/claude-tool-result.stream.jsonl", import.meta.url),
+      "utf8",
+    )
+      .split("\n")
+      .filter((l) => l.trim().length > 0);
+
+    const parsed = lines
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .map((raw) => parseStreamMessage(raw))
+      .filter((m): m is NonNullable<typeof m> => m !== null);
+
+    it("surfaces both tool_results, paired with their tool_use ids", () => {
+      const toolUses = parsed.filter(
+        (m): m is Extract<StreamMessage, { type: "tool_use" }> =>
+          m.type === "tool_use",
+      );
+      const toolResults = parsed.filter(
+        (m): m is Extract<StreamMessage, { type: "tool_result" }> =>
+          m.type === "tool_result",
+      );
+      expect(toolUses).toHaveLength(2);
+      expect(toolResults).toHaveLength(2);
+      expect(toolResults.map((m) => m.toolUseId)).toEqual(
+        toolUses.map((m) => m.toolUseId),
+      );
+      expect(toolResults[0]).toMatchObject({
+        content: "1\thello world\n2\t",
+      });
+      expect(toolResults[0]?.meta).toBeUndefined();
+      expect(toolResults[1]?.content).toContain("File does not exist");
+      expect(toolResults[1]?.meta).toEqual({ isError: true });
+    });
+
+    it("emits no user messages, so the operator's prompt cannot double", () => {
+      expect(parsed.filter((m) => m.type === "user")).toHaveLength(0);
+    });
+
+    it("yields the whole session in order", () => {
+      const label = (m: StreamMessage) => {
+        const subtype = "subtype" in m ? m.subtype : undefined;
+        return subtype ? `${m.type}:${subtype}` : m.type;
+      };
+      expect(parsed.map(label)).toEqual([
+        "tool_use",
+        "tool_result",
+        "tool_use",
+        "tool_result",
+        "assistant",
+        "result",
+      ]);
     });
   });
 

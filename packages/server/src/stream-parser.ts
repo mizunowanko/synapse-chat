@@ -21,6 +21,38 @@ interface ContentBlock {
   text?: string;
   name?: string;
   input?: Record<string, unknown>;
+  /** `tool_result` blocks only: the `tool_use.id` this result answers. */
+  tool_use_id?: string;
+  /** `tool_result` blocks only: string, or a nested block array. */
+  content?: unknown;
+  /** `tool_result` blocks only: the tool raised instead of returning. */
+  is_error?: boolean;
+}
+
+/**
+ * Flatten a `tool_result` payload to displayable text.
+ *
+ * The payload is a string for most tools, but an array of content blocks when
+ * the tool returns mixed media (`Read` on a PNG yields a lone `image` block
+ * whose `source.data` is megabytes of base64). Only `text` blocks are kept —
+ * everything else is deliberately dropped rather than stringified, so a binary
+ * result can never be pasted into a chat bubble.
+ *
+ * Returns `undefined` — not `""` — when nothing displayable survives, so
+ * callers can tell "no text" apart from "the tool printed an empty string".
+ */
+function normalizeToolResultContent(rawContent: unknown): string | undefined {
+  if (typeof rawContent === "string") {
+    return rawContent.length > 0 ? rawContent : undefined;
+  }
+  if (Array.isArray(rawContent)) {
+    const text = (rawContent as ContentBlock[])
+      .filter((b) => b.type === "text" && b.text)
+      .map((b) => b.text as string)
+      .join("\n");
+    return text.length > 0 ? text : undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -407,18 +439,61 @@ function parseStreamMessageInner(
       };
     }
 
+    // Claude delivers every tool_result wrapped in a `user` turn — the API's
+    // own convention, since results are fed back as user-role content:
+    //
+    //   {"type":"user","message":{"role":"user","content":[
+    //     {"type":"tool_result","tool_use_id":"toolu_…","content":"1\thello"}]}}
+    //
+    // Without this case the whole turn was dropped and Claude sessions showed
+    // tool calls with no results (#56). agy / Codex were unaffected: their
+    // adapters build StreamMessage directly and never reach this parser.
+    case "user": {
+      const msg = raw.message as { content?: ContentBlock[] | string } | undefined;
+      const blocks = Array.isArray(msg?.content) ? (msg.content as ContentBlock[]) : [];
+
+      // Only tool_result blocks. A `user` turn also carries the operator's own
+      // prompt (as a bare string, or as `text` blocks) — and the client already
+      // appended that optimistically when it sent it (`useChat.ts`), so echoing
+      // it back would draw every question twice.
+      const block = blocks.find((b) => b.type === "tool_result");
+      if (!block) return null;
+
+      // First block only: `CLIAdapter.parseOutput` is one line → one message,
+      // so a batch of parallel results cannot be expanded here. Same known
+      // limitation as `tool_use` above, which takes `toolUses[0]`. Claude emits
+      // one `user` turn per result in practice (measured, claude-haiku-4-5).
+      const content = normalizeToolResultContent(block.content);
+      const toolUseId = block.tool_use_id;
+      if (content === undefined && !toolUseId) return null;
+
+      // `parent_tool_use_id` (non-null inside a Task sidechain) is deliberately
+      // not filtered: `case "assistant"` above already lets a subagent's
+      // `tool_use` through, so dropping only its result would leave a call that
+      // never visibly completes.
+      return {
+        type: "tool_result",
+        ...(content !== undefined ? { content } : {}),
+        ...(toolUseId ? { toolUseId } : {}),
+        // ToolResultMessage has no `isError` field, and the content already
+        // reads as the failure ("File does not exist…"). Flagging it via `meta`
+        // matches how codex.ts carries `exitCode`, and lets an app style the
+        // bubble later without a core type change.
+        ...(block.is_error === true ? { meta: { isError: true } } : {}),
+      };
+    }
+
+    // Top-level `{"type":"tool_result"}` — the flat shape, as opposed to
+    // Claude's nested one above. No bundled provider emits it today (measured:
+    // Claude wraps results in `user`; agy / Codex / Gemini build StreamMessage
+    // directly). It is kept because this parser is also the contract for the
+    // flat "runner" dialect — `bin/ollama-runner.mjs` writes
+    // `{"type":"assistant",…}` / `{"type":"result",…}` lines straight to stdout
+    // — and a runner that gains tools would emit exactly this. Removing it
+    // would be a silent breaking change for out-of-tree adapters.
     case "tool_result": {
-      const rawContent = raw.content;
-      let content: string | undefined;
-      if (typeof rawContent === "string") {
-        content = rawContent;
-      } else if (Array.isArray(rawContent)) {
-        content = (rawContent as ContentBlock[])
-          .filter((b) => b.type === "text" && b.text)
-          .map((b) => b.text as string)
-          .join("\n");
-      }
-      if (!content) return null;
+      const content = normalizeToolResultContent(raw.content);
+      if (content === undefined) return null;
       const toolUseId = raw.tool_use_id as string | undefined;
       return {
         type: "tool_result",
