@@ -96,9 +96,11 @@ export class IpcProcessManager
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
     allowedTools?: string,
+    partialMessages?: boolean,
   ): void {
     this.sendCommand({
       type: "launch-commander",
+      partialMessages,
       id,
       fleetPath,
       additionalDirs,
@@ -116,9 +118,11 @@ export class IpcProcessManager
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
     allowedTools?: string,
+    partialMessages?: boolean,
   ): void {
     this.sendCommand({
       type: "resume-commander",
+      partialMessages,
       allowedTools,
       id,
       sessionId,

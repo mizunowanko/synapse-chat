@@ -136,6 +136,12 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
    * e.g. an app whose agent converses with the user and then persists the
    * result to disk. The other write-capable entry points (`dispatchSortie`,
    * `dispatch`) spawn with stdin closed, so they cannot be used for chat.
+   *
+   * `partialMessages` turns on Claude's `--include-partial-messages`, so the
+   * CLI emits token deltas and a chat UI can render the reply as it arrives.
+   * Consumers must then parse with
+   * `parseStreamMessage(raw, { partialMessages: true })` — the two halves are
+   * a pair, and using only one renders every sentence twice or not at all.
    */
   launchCommander(
     id: string,
@@ -144,6 +150,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
     allowedTools: string = COMMANDER_ALLOWED_TOOLS,
+    partialMessages = false,
   ): ChildProcess {
     const args = [
       "-p",
@@ -153,6 +160,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
       "--output-format",
       "stream-json",
       "--verbose",
+      ...(partialMessages ? ["--include-partial-messages"] : []),
       "--allowedTools",
       allowedTools,
       ...(systemPrompt ? ["--append-system-prompt", systemPrompt] : []),
@@ -229,9 +237,9 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
   /**
    * Resume an interactive commander CLI via `--resume <sessionId>`.
    *
-   * `allowedTools` follows the same rule as {@link ProcessManager.launchCommander}:
-   * read-only by default, so pass the same list the session was launched with
-   * when it needs to keep writing.
+   * `allowedTools` and `partialMessages` follow the same rule as
+   * {@link ProcessManager.launchCommander}: both default to the conservative
+   * setting, so pass the same values the session was launched with.
    */
   resumeCommander(
     id: string,
@@ -241,6 +249,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
     allowedTools: string = COMMANDER_ALLOWED_TOOLS,
+    partialMessages = false,
   ): ChildProcess {
     const args = [
       "--resume",
@@ -250,6 +259,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
       "--output-format",
       "stream-json",
       "--verbose",
+      ...(partialMessages ? ["--include-partial-messages"] : []),
       "--allowedTools",
       allowedTools,
       ...(systemPrompt ? ["--append-system-prompt", systemPrompt] : []),

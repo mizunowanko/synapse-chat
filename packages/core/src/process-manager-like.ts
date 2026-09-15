@@ -73,6 +73,11 @@ export interface ProcessManagerLike {
      * set; pass an explicit list when the session needs to write.
      */
     allowedTools?: string,
+    /**
+     * Enable Claude's `--include-partial-messages` so the CLI streams token
+     * deltas. Parse with `{ partialMessages: true }` to match.
+     */
+    partialMessages?: boolean,
   ): void;
 
   /**
@@ -87,6 +92,8 @@ export interface ProcessManagerLike {
     extraEnv?: Record<string, string>,
     /** See {@link ProcessManagerLike.launchCommander}. */
     allowedTools?: string,
+    /** See {@link ProcessManagerLike.launchCommander}. */
+    partialMessages?: boolean,
   ): void;
 
   /**

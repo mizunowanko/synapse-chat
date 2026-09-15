@@ -35,6 +35,7 @@ export type IpcLaunchCommanderCommand = {
   systemPrompt?: string | undefined;
   extraEnv?: Record<string, string> | undefined;
   allowedTools?: string | undefined;
+  partialMessages?: boolean | undefined;
 };
 
 export type IpcResumeCommanderCommand = {
@@ -46,6 +47,7 @@ export type IpcResumeCommanderCommand = {
   systemPrompt?: string | undefined;
   extraEnv?: Record<string, string> | undefined;
   allowedTools?: string | undefined;
+  partialMessages?: boolean | undefined;
 };
 
 export type IpcResumeSessionCommand = {
