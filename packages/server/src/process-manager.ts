@@ -127,12 +127,23 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
     return proc;
   }
 
+  /**
+   * Spawn an interactive Claude session (stdin stays open for
+   * {@link ProcessManager.sendMessage}).
+   *
+   * `allowedTools` defaults to {@link COMMANDER_ALLOWED_TOOLS}, which is
+   * read-only. Pass an explicit list when the session is expected to write —
+   * e.g. an app whose agent converses with the user and then persists the
+   * result to disk. The other write-capable entry points (`dispatchSortie`,
+   * `dispatch`) spawn with stdin closed, so they cannot be used for chat.
+   */
   launchCommander(
     id: string,
     fleetPath: string,
     additionalDirs: string[],
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
+    allowedTools: string = COMMANDER_ALLOWED_TOOLS,
   ): ChildProcess {
     const args = [
       "-p",
@@ -143,7 +154,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
       "stream-json",
       "--verbose",
       "--allowedTools",
-      COMMANDER_ALLOWED_TOOLS,
+      allowedTools,
       ...(systemPrompt ? ["--append-system-prompt", systemPrompt] : []),
       ...additionalDirs.flatMap((d) => ["--add-dir", d]),
     ];
@@ -215,6 +226,13 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
     return { ok: true };
   }
 
+  /**
+   * Resume an interactive commander CLI via `--resume <sessionId>`.
+   *
+   * `allowedTools` follows the same rule as {@link ProcessManager.launchCommander}:
+   * read-only by default, so pass the same list the session was launched with
+   * when it needs to keep writing.
+   */
   resumeCommander(
     id: string,
     sessionId: string,
@@ -222,6 +240,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
     additionalDirs: string[],
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
+    allowedTools: string = COMMANDER_ALLOWED_TOOLS,
   ): ChildProcess {
     const args = [
       "--resume",
@@ -232,7 +251,7 @@ export class ProcessManager extends EventEmitter implements ProcessManagerLike {
       "stream-json",
       "--verbose",
       "--allowedTools",
-      COMMANDER_ALLOWED_TOOLS,
+      allowedTools,
       ...(systemPrompt ? ["--append-system-prompt", systemPrompt] : []),
       ...additionalDirs.flatMap((d) => ["--add-dir", d]),
     ];

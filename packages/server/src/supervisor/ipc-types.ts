@@ -34,6 +34,7 @@ export type IpcLaunchCommanderCommand = {
   additionalDirs: string[];
   systemPrompt?: string | undefined;
   extraEnv?: Record<string, string> | undefined;
+  allowedTools?: string | undefined;
 };
 
 export type IpcResumeCommanderCommand = {
@@ -44,6 +45,7 @@ export type IpcResumeCommanderCommand = {
   additionalDirs: string[];
   systemPrompt?: string | undefined;
   extraEnv?: Record<string, string> | undefined;
+  allowedTools?: string | undefined;
 };
 
 export type IpcResumeSessionCommand = {

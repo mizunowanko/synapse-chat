@@ -68,6 +68,11 @@ export interface ProcessManagerLike {
     additionalDirs: string[],
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
+    /**
+     * Comma-separated tool allowlist. Implementations default to a read-only
+     * set; pass an explicit list when the session needs to write.
+     */
+    allowedTools?: string,
   ): void;
 
   /**
@@ -80,6 +85,8 @@ export interface ProcessManagerLike {
     additionalDirs: string[],
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
+    /** See {@link ProcessManagerLike.launchCommander}. */
+    allowedTools?: string,
   ): void;
 
   /**
