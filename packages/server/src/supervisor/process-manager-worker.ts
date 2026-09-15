@@ -77,6 +77,7 @@ process.on("message", (msg: ProcessManagerWorkerMessage) => {
         msg.additionalDirs,
         msg.systemPrompt,
         msg.extraEnv,
+        msg.allowedTools,
       );
       break;
 
@@ -88,6 +89,7 @@ process.on("message", (msg: ProcessManagerWorkerMessage) => {
         msg.additionalDirs,
         msg.systemPrompt,
         msg.extraEnv,
+        msg.allowedTools,
       );
       break;
 

@@ -95,6 +95,7 @@ export class IpcProcessManager
     additionalDirs: string[],
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
+    allowedTools?: string,
   ): void {
     this.sendCommand({
       type: "launch-commander",
@@ -103,6 +104,7 @@ export class IpcProcessManager
       additionalDirs,
       systemPrompt,
       extraEnv,
+      allowedTools,
     });
   }
 
@@ -113,9 +115,11 @@ export class IpcProcessManager
     additionalDirs: string[],
     systemPrompt?: string,
     extraEnv?: Record<string, string>,
+    allowedTools?: string,
   ): void {
     this.sendCommand({
       type: "resume-commander",
+      allowedTools,
       id,
       sessionId,
       fleetPath,
