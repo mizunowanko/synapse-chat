@@ -22,7 +22,11 @@ describe("ProcessManager.launchCommander", () => {
     }
   });
 
-  function argvOf(id: string, allowedTools?: string): string[] {
+  function argvOf(
+    id: string,
+    allowedTools?: string,
+    partialMessages?: boolean,
+  ): string[] {
     const proc = manager.launchCommander(
       id,
       tmpdir(),
@@ -30,6 +34,7 @@ describe("ProcessManager.launchCommander", () => {
       undefined,
       undefined,
       allowedTools,
+      partialMessages,
     );
     spawned.push(proc);
     return proc.spawnargs;
@@ -46,5 +51,15 @@ describe("ProcessManager.launchCommander", () => {
     const tools = "Bash,Read,Write,Edit,Glob,Grep";
     const argv = argvOf("explicit-tools", tools);
     expect(argv[argv.indexOf("--allowedTools") + 1]).toBe(tools);
+  });
+
+  it("does not stream token deltas by default", () => {
+    expect(argvOf("no-partials")).not.toContain("--include-partial-messages");
+  });
+
+  it("streams token deltas when asked", () => {
+    expect(argvOf("partials", undefined, true)).toContain(
+      "--include-partial-messages",
+    );
   });
 });

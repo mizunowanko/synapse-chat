@@ -78,6 +78,7 @@ process.on("message", (msg: ProcessManagerWorkerMessage) => {
         msg.systemPrompt,
         msg.extraEnv,
         msg.allowedTools,
+        msg.partialMessages,
       );
       break;
 
@@ -90,6 +91,7 @@ process.on("message", (msg: ProcessManagerWorkerMessage) => {
         msg.systemPrompt,
         msg.extraEnv,
         msg.allowedTools,
+        msg.partialMessages,
       );
       break;
 
