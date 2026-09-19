@@ -9,6 +9,7 @@ export {
 } from "./components/CollapsibleOutput.js";
 export {
   CollapsibleThinking,
+  DEFAULT_THINKING_AUTO_COLLAPSE_THRESHOLD,
   type CollapsibleThinkingProps,
 } from "./components/CollapsibleThinking.js";
 export {
