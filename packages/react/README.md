@@ -4,7 +4,7 @@ React primitives for building AI chat UIs on top of `@synapse-chat/core` stream 
 
 - `ChatMessage` — message bubble for user / assistant / tool_use / tool_result / error
 - `ToolUseGroup` — collapsible wrapper for consecutive tool calls
-- `SessionInput` — controlled textarea with image paste / drag-and-drop
+- `SessionInput` — controlled textarea with image paste / drag-and-drop. `minRows` sets the empty height; `actions` stacks extra buttons above the send button
 - `useChat` — WebSocket connection + message accumulator
 - `useWebSocket` — low-level hook wrapping `WSClient`
 - `WSClient` — generic WebSocket client with backoff + optional ping/pong
