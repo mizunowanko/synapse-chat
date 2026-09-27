@@ -7,6 +7,7 @@ import {
   type ClipboardEvent,
   type DragEvent,
   type ChangeEvent,
+  type ReactNode,
 } from "react";
 import { Send, X, ImageIcon } from "lucide-react";
 import type { Attachment, AttachmentImageMediaType } from "@synapse-chat/core";
@@ -108,6 +109,21 @@ export interface SessionInputProps {
   maxImageBytes?: number;
   /** Additional classes merged onto the outer container. */
   className?: string;
+  /**
+   * Buttons stacked directly above the send button, in the same row as the
+   * textarea. When given, the right-hand column becomes two rows of 24px
+   * (`h-6`): the send button shrinks from 36px to 24px so that the column is
+   * exactly as tall as two text lines — pair it with `minRows={2}`. Size each
+   * action `h-6 w-9` to line up with the send button. Omit it and the layout
+   * is unchanged (a single 36px send button).
+   */
+  actions?: ReactNode;
+  /**
+   * How many lines the textarea shows while empty. Defaults to 1. It still
+   * grows with its content up to 6 lines (or `minRows`, if that is larger)
+   * and scrolls beyond that.
+   */
+  minRows?: number;
 }
 
 export function SessionInput({
@@ -119,6 +135,8 @@ export function SessionInput({
   maxImages = DEFAULT_MAX_IMAGES,
   maxImageBytes = DEFAULT_MAX_IMAGE_BYTES,
   className,
+  actions,
+  minRows = 1,
 }: SessionInputProps) {
   const [images, setImages] = useState<PreviewAttachment[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -130,9 +148,9 @@ export function SessionInput({
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    const maxHeight = LINE_HEIGHT * MAX_ROWS + PADDING_Y;
+    const maxHeight = LINE_HEIGHT * Math.max(MAX_ROWS, minRows) + PADDING_Y;
     el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
-  }, []);
+  }, [minRows]);
 
   useEffect(() => {
     resetHeight();
@@ -270,6 +288,23 @@ export function SessionInput({
 
   const canSend = !disabled && (value.trim().length > 0 || images.length > 0);
 
+  const sendButton = (
+    <button
+      type="button"
+      data-testid="session-input-send"
+      onClick={handleSend}
+      disabled={!canSend}
+      className={cn(
+        "shrink-0 inline-flex w-9 items-center justify-center rounded-md",
+        actions == null ? "h-9" : "h-6",
+        "bg-primary text-primary-foreground hover:bg-primary/90 transition-colors",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+      )}
+    >
+      <Send className="h-4 w-4" />
+    </button>
+  );
+
   return (
     <div
       className={cn(
@@ -335,25 +370,25 @@ export function SessionInput({
           onPaste={handlePaste}
           placeholder={placeholder}
           disabled={disabled}
-          rows={1}
+          rows={minRows}
+          data-testid="session-input-textarea"
           className={cn(
             "flex-1 resize-none overflow-y-auto rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors",
             "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             "disabled:cursor-not-allowed disabled:opacity-50",
           )}
         />
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={!canSend}
-          className={cn(
-            "shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-md",
-            "bg-primary text-primary-foreground hover:bg-primary/90 transition-colors",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-          )}
-        >
-          <Send className="h-4 w-4" />
-        </button>
+        {actions == null ? (
+          sendButton
+        ) : (
+          <div
+            data-testid="session-input-actions"
+            className="shrink-0 flex flex-col items-center"
+          >
+            {actions}
+            {sendButton}
+          </div>
+        )}
       </div>
     </div>
   );
