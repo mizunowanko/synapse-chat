@@ -64,7 +64,14 @@ const next = collect(briefing, "claude", dir).briefing; // 書き込みが Brief
 
 **回収の条件は「書き込まれた、または Briefing に該当するエントリが無い」。** 指紋が一致する Handout は人の手が入っていないので読まない —— 無編集で再実行しても「書き込みあり」と誤検知しないのはこのため。一方、指紋は「*どれかの* Briefing が生成した」しか意味しないので、手元の Briefing が知らないファイルは指紋があっても取り込む（そうしないと唯一のコピーを落とす）。
 
-**Handout が消えていたら、その Layout が配った痕跡があるときだけ「消された」と読む。** skill / subagent の Handout が無いとき、同じディレクトリ（`skillDir` / `subagentDir`）に指紋付きの Handout が 1 つでも残っていれば、`handOut()` がそこへ配ったことがあり、このエントリも一緒に配ったはずなので、`collect()` は Briefing からそのエントリを外して `CollectResult.removed`（`{ kind, name, path }`）で返す。痕跡が無ければ —— まだ一度も配られていない provider、手書きだけのディレクトリ、ディレクトリごと無い —— エントリは残す。「無い」は新しいチェックアウトや移行途中とも見分けがつかず、そのとき Briefing は本文の唯一のコピーだから。**その代わり、ある Layout の最後の 1 つを消しても伝わらない**（痕跡が残らない）。
+**Handout が消えていたら、配った痕跡があるときだけ「消された」と読む。** skill / subagent の Handout が無いとき、次の 2 つが揃えば `collect()` は Briefing からそのエントリを外し、`CollectResult.removed`（`{ kind, name, path }`）で返す。
+
+| 痕跡 | 意味 |
+|---|---|
+| 同じディレクトリ（`skillDir` / `subagentDir`）に**指紋付きの Handout** が 1 つでも残っている | この Layout には `handOut()` が配ったことがあり、このエントリも一緒に配ったはず |
+| **別の Layout にそのエントリの Handout が残っている**（agy と Codex が共有する `.agents/skills/` は同じファイルなので「別」に数えない） | このエントリは配られたことがある |
+
+どちらかが欠けたらエントリは残す。まだ一度も配られていない provider、手書きだけのディレクトリ、ディレクトリごと無い、配らずに書いた `briefing.yaml` —— どれも「無い」が「消された」と見分けがつかず、そのとき Briefing は本文の唯一のコピーだから。**その代わり、ある Layout の最後の 1 つを消したときと、全 Layout から同時に消したときは伝わらない**（痕跡が残らない）。消すのは 1 つの provider の Handout で。
 
 他の Layout に残った Handout を消すのは呼び出し側の仕事（下の「配布は上書きと追加だけ」）。`removed` は conflict の判定にも使う：ある provider で消され、別の provider で同じエントリが書き込まれていたら、それは 2 人の書き込み。
 

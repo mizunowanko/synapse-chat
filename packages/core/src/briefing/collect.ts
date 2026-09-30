@@ -137,12 +137,21 @@ export function detectMarkUps(
  * before.** "Not on disk" is also what a fresh checkout, a provider that was
  * never handed out to, or a directory still waiting for its first `handOut()`
  * looks like — and in all of those the briefing is the only copy of the text.
- * So an entry is taken out only when its handout is gone *and* the directory
- * it lived in (`skillDir` / `subagentDir`) still holds at least one handout
- * carrying a fingerprint: proof that `handOut()` wrote there, and that it
- * would have written this entry alongside. Without that proof the entry stays,
- * which means deleting a layout's *last* skill is not carried over — the
- * conservative side of a question that cannot be answered from disk.
+ * So an entry is taken out only when its handout is gone and both of these
+ * still hold:
+ *
+ *  - **this layout was handed out to**: the directory the entry lived in
+ *    (`skillDir` / `subagentDir`) still holds a handout carrying a
+ *    fingerprint, so `handOut()` wrote there and would have written this entry
+ *    alongside;
+ *  - **the entry was handed out**: another layout still has its handout. An
+ *    entry on disk nowhere at all may never have left the briefing (a
+ *    `briefing.yaml` written without a hand-out), and taking it out then would
+ *    delete the only copy.
+ *
+ * Without that proof the entry stays. Deleting a layout's *last* skill, or
+ * deleting an entry from every layout at once, is therefore not carried over —
+ * the conservative side of a question that cannot be answered from disk.
  */
 export function collect(briefing: Briefing, layoutName: LayoutName, dir: string): CollectResult {
   const layout = LAYOUTS[layoutName];
@@ -201,6 +210,23 @@ function hasHandedOut(dir: string, relatives: string[]): boolean {
     const absolute = join(dir, relative);
     if (!existsSync(absolute) || !statSync(absolute).isFile()) return false;
     return stripFingerprint(readFileSync(absolute, "utf-8")).fingerprint !== null;
+  });
+}
+
+/**
+ * True when `relativeOf` puts this entry at a different path in some other
+ * layout and a file is there. Layouts that share the path (agy and Codex share
+ * `.agents/skills/`) are not "other": that is the same file, and it is gone.
+ */
+function handedOutElsewhere(
+  dir: string,
+  layoutName: LayoutName,
+  relativeOf: (layout: Layout) => string,
+): boolean {
+  const own = relativeOf(LAYOUTS[layoutName]);
+  return LAYOUT_NAMES.some((other) => {
+    const relative = relativeOf(LAYOUTS[other]);
+    return relative !== own && existsSync(join(dir, relative));
   });
 }
 
@@ -336,8 +362,12 @@ function collectSkills(
   for (const skill of briefing.skills) {
     const relative = relativeOf(skill.name);
     if (!existsSync(join(dir, relative))) {
-      if (handedOut) removed.push({ kind: "skill", name: skill.name, path: relative });
-      else updated.push(skill);
+      const skillPath = (other: Layout): string => `${other.skillDir}/${skill.name}/SKILL.md`;
+      if (handedOut && handedOutElsewhere(dir, layoutName, skillPath)) {
+        removed.push({ kind: "skill", name: skill.name, path: relative });
+      } else {
+        updated.push(skill);
+      }
       continue;
     }
     const content = readMarkedUp(dir, relative);
@@ -400,8 +430,13 @@ function collectSubagents(
   for (const subagent of briefing.subagents) {
     const relative = relativeOf(subagent.name);
     if (!existsSync(join(dir, relative))) {
-      if (handedOut) removed.push({ kind: "subagent", name: subagent.name, path: relative });
-      else updated.push(subagent);
+      const subagentPath = (other: Layout): string =>
+        `${other.subagentDir}/${subagent.name}${other.subagentFormat === "toml" ? ".toml" : ".md"}`;
+      if (handedOut && handedOutElsewhere(dir, layoutName, subagentPath)) {
+        removed.push({ kind: "subagent", name: subagent.name, path: relative });
+      } else {
+        updated.push(subagent);
+      }
       continue;
     }
     const content = readMarkedUp(dir, relative);

@@ -391,6 +391,26 @@ describe("collect — deleted handouts", () => {
     expect(result.removed).toEqual([]);
   });
 
+  it("never takes out an entry that no layout has a handout for", () => {
+    // Added to the briefing without a hand-out (a briefing.yaml written in
+    // place). Every layout has handed out *something*, but not this — and the
+    // briefing is its only copy.
+    handOutToDisk(base);
+    for (const layout of ["claude", "agents", "codex"] as const) {
+      const result = collect(twoSkills, layout, dir);
+      expect(result.briefing).toEqual(twoSkills);
+      expect(result.removed).toEqual([]);
+    }
+  });
+
+  it("does not carry over an entry deleted from every layout at once", () => {
+    // With no copy left anywhere, this is indistinguishable from the case above.
+    handOutToDisk(twoSkills);
+    rmSync(join(dir, ".claude/skills/multi-character-scene"), { recursive: true });
+    rmSync(join(dir, ".agents/skills/multi-character-scene"), { recursive: true });
+    expect(collect(twoSkills, "claude", dir).removed).toEqual([]);
+  });
+
   it("never takes anything out of an empty directory", () => {
     for (const layout of ["claude", "agents", "codex"] as const) {
       const result = collect(twoSkills, layout, dir);
