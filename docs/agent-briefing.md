@@ -41,7 +41,7 @@ import {
 | `handOut(briefing, layoutName)` | Briefing → Handout | 1 つの Layout に配る。`path → content` を返すだけで、ファイルは書かない |
 | `handOutAll(briefing, layouts?)` | Briefing → Handout | 全 Layout に配る。共有パスが食い違ったら throw |
 | `detectMarkUps(briefing, dir)` | — | 書き込まれた Handout を列挙する |
-| `collect(briefing, layoutName, dir)` | Handout → Briefing | 書き込みを Briefing に回収する |
+| `collect(briefing, layoutName, dir)` | Handout → Briefing | 書き込みを Briefing に回収する。消された Handout のエントリは外して `removed` で返す |
 | `emptyBriefing(name)` | — | 空の Briefing。まだ配ったことのないディレクトリの取り込み先 |
 | `parseBriefing` / `serializeBriefing` | — | `<name>.briefing.yaml` との相互変換 |
 
@@ -63,6 +63,17 @@ const next = collect(briefing, "claude", dir).briefing; // 書き込みが Brief
 ```
 
 **回収の条件は「書き込まれた、または Briefing に該当するエントリが無い」。** 指紋が一致する Handout は人の手が入っていないので読まない —— 無編集で再実行しても「書き込みあり」と誤検知しないのはこのため。一方、指紋は「*どれかの* Briefing が生成した」しか意味しないので、手元の Briefing が知らないファイルは指紋があっても取り込む（そうしないと唯一のコピーを落とす）。
+
+**Handout が消えていたら、配った痕跡があるときだけ「消された」と読む。** skill / subagent の Handout が無いとき、次の 2 つが揃えば `collect()` は Briefing からそのエントリを外し、`CollectResult.removed`（`{ kind, name, path }`）で返す。
+
+| 痕跡 | 意味 |
+|---|---|
+| 同じディレクトリ（`skillDir` / `subagentDir`）に**指紋付きの Handout** が 1 つでも残っている | この Layout には `handOut()` が配ったことがあり、このエントリも一緒に配ったはず |
+| **別の Layout にそのエントリの Handout が残っている**（agy と Codex が共有する `.agents/skills/` は同じファイルなので「別」に数えない） | このエントリは配られたことがある |
+
+どちらかが欠けたらエントリは残す。まだ一度も配られていない provider、手書きだけのディレクトリ、ディレクトリごと無い、配らずに書いた `briefing.yaml` —— どれも「無い」が「消された」と見分けがつかず、そのとき Briefing は本文の唯一のコピーだから。**その代わり、ある Layout の最後の 1 つを消したときと、全 Layout から同時に消したときは伝わらない**（痕跡が残らない）。消すのは 1 つの provider の Handout で。
+
+他の Layout に残った Handout を消すのは呼び出し側の仕事（下の「配布は上書きと追加だけ」）。`removed` は conflict の判定にも使う：ある provider で消され、別の provider で同じエントリが書き込まれていたら、それは 2 人の書き込み。
 
 **この 2 つの条件が揃うので、取り込みと回収は同じ関数でよい。** 一度も配っていないディレクトリのファイルは指紋を持たないから、`collect()` を向ければ全部が「新しい」と読まれる —— それが移行に必要なことのすべて。`importFrom()` と `absorb()` を分ける理由は無い。
 
@@ -103,7 +114,7 @@ AGENTS.md                ← agents + codex（本文は CLAUDE.md と完全一�
 - **fingerprint の基準ズレ。** 指紋を剥がした後の文字列と、ハッシュを取る対象が 1 バイトでも違うと、**全 Handout が常に「書き込みあり」判定**になり、警告が意味を持たなくなる。`normalizeTrailingNewline` を全経路で通しているのはこのため
 - **指紋は末尾に残らない。** 人はファイルの後ろに追記する。末尾アンカーの正規表現だと指紋を見失い、**指紋の行そのものが本文として回収され**、次に配るときは 2 つ目の指紋の下に埋まる。位置に依存せず、すべての指紋行を剥がすこと
 - **散文はブロックごと verbatim で運ぶ。** 要約・整形をすると回収で戻せない
-- **配布は上書きと追加だけ。削除しない。** 配布先には**ユーザの唯一の on-disk コピーであるエージェント定義**が置かれる。`handOut()` が `path → content` しか返さないのは、API として削除を表現できなくするため
+- **配布は上書きと追加だけ。削除しない。** 配布先には**ユーザの唯一の on-disk コピーであるエージェント定義**が置かれる。`handOut()` が `path → content` しか返さないのは、API として削除を表現できなくするため。Handout で消された skill を他の Layout からも片付けるかどうかは、`collect()` の `removed` を見て呼び出し側が決める
 
 ## 検証のしかた
 

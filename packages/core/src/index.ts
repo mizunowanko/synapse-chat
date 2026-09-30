@@ -52,4 +52,5 @@ export type {
   LayoutName,
   MarkedUpFile,
   ProviderFrontmatter,
+  RemovedEntry,
 } from "./briefing/index.js";
