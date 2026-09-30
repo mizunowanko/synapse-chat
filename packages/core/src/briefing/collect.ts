@@ -61,10 +61,29 @@ export interface MarkedUpFile {
   layouts: LayoutName[];
 }
 
+/**
+ * A briefing entry taken out because its handout was deleted.
+ *
+ * `path` is the handout that is gone, relative to the agent directory. The
+ * entry's handouts in *other* layouts are still on disk: `handOut()` cannot
+ * express a deletion, so tidying them up is the caller's decision.
+ */
+export interface RemovedEntry {
+  kind: "skill" | "subagent";
+  name: string;
+  path: string;
+}
+
 export interface CollectResult {
   briefing: Briefing;
   /** Relative paths whose contents were taken into the briefing. */
   collected: string[];
+  /**
+   * Entries dropped from the briefing because their handout in this layout was
+   * deleted. Only reported where the layout provably handed out to that
+   * directory — see {@link collect}.
+   */
+  removed: RemovedEntry[];
 }
 
 /** A briefing with nothing in it, to collect a never-handed-out directory into. */
@@ -112,14 +131,24 @@ export function detectMarkUps(
  *
  * Skills and subagents present on disk but absent from the briefing are
  * *added* — that is how somebody adds a skill, by dropping a directory next to
- * the others. The reverse does not hold: a file that has disappeared leaves its
- * briefing entry alone, because "not on disk" is also what a fresh checkout
- * looks like, and the briefing is the only copy of the text.
+ * the others.
+ *
+ * **A missing handout is a deletion only where this layout has handed out
+ * before.** "Not on disk" is also what a fresh checkout, a provider that was
+ * never handed out to, or a directory still waiting for its first `handOut()`
+ * looks like — and in all of those the briefing is the only copy of the text.
+ * So an entry is taken out only when its handout is gone *and* the directory
+ * it lived in (`skillDir` / `subagentDir`) still holds at least one handout
+ * carrying a fingerprint: proof that `handOut()` wrote there, and that it
+ * would have written this entry alongside. Without that proof the entry stays,
+ * which means deleting a layout's *last* skill is not carried over — the
+ * conservative side of a question that cannot be answered from disk.
  */
 export function collect(briefing: Briefing, layoutName: LayoutName, dir: string): CollectResult {
   const layout = LAYOUTS[layoutName];
   const next: Briefing = structuredClone(briefing);
   const collected: string[] = [];
+  const removed: RemovedEntry[] = [];
   // Nothing in the briefing describes an instruction file yet, so whatever is
   // on disk is new rather than stale — even if we are the ones who wrote it.
   const instructionsAreNew =
@@ -139,10 +168,10 @@ export function collect(briefing: Briefing, layoutName: LayoutName, dir: string)
     mergeRules(next, legacyRules);
   }
 
-  next.skills = collectSkills(next, layout, layoutName, dir, collected);
-  next.subagents = collectSubagents(next, layout, layoutName, dir, collected);
+  next.skills = collectSkills(next, layout, layoutName, dir, collected, removed);
+  next.subagents = collectSubagents(next, layout, layoutName, dir, collected, removed);
 
-  return { briefing: next, collected };
+  return { briefing: next, collected, removed };
 }
 
 /**
@@ -158,6 +187,21 @@ function readCollectable(dir: string, relative: string, isNew: boolean): string 
   const raw = readFileSync(absolute, "utf-8");
   if (!isNew && !isMarkedUp(raw)) return null;
   return stripFingerprint(raw).content;
+}
+
+/**
+ * True when some handout under `handoutDir` carries a fingerprint — i.e.
+ * `handOut()` has written into this directory, so an entry missing from it was
+ * deleted rather than never handed out. A hand-written file with no
+ * fingerprint proves nothing: that is what a directory looks like before its
+ * first hand-out.
+ */
+function hasHandedOut(dir: string, relatives: string[]): boolean {
+  return relatives.some((relative) => {
+    const absolute = join(dir, relative);
+    if (!existsSync(absolute) || !statSync(absolute).isFile()) return false;
+    return stripFingerprint(readFileSync(absolute, "utf-8")).fingerprint !== null;
+  });
 }
 
 /** Returns the fingerprint-free content of a handout iff somebody wrote on it. */
@@ -279,17 +323,31 @@ function collectSkills(
   layoutName: LayoutName,
   dir: string,
   collected: string[],
+  removed: RemovedEntry[],
 ): BriefingSkill[] {
   const known = new Set(briefing.skills.map((skill) => skill.name));
   const relativeOf = (name: string): string => `${layout.skillDir}/${name}/SKILL.md`;
+  const handedOut = hasHandedOut(
+    dir,
+    listSubdirs(join(dir, layout.skillDir)).map(relativeOf),
+  );
 
-  const updated = briefing.skills.map((skill) => {
+  const updated: BriefingSkill[] = [];
+  for (const skill of briefing.skills) {
     const relative = relativeOf(skill.name);
+    if (!existsSync(join(dir, relative))) {
+      if (handedOut) removed.push({ kind: "skill", name: skill.name, path: relative });
+      else updated.push(skill);
+      continue;
+    }
     const content = readMarkedUp(dir, relative);
-    if (content === null) return skill;
+    if (content === null) {
+      updated.push(skill);
+      continue;
+    }
     collected.push(relative);
-    return toSkill(skill.name, content, layoutName, skill.providerFrontmatter);
-  });
+    updated.push(toSkill(skill.name, content, layoutName, skill.providerFrontmatter));
+  }
 
   // Skills the briefing has no entry for — added by hand, or left over from a
   // briefing we no longer hold. Either way this is the only copy.
@@ -326,20 +384,34 @@ function collectSubagents(
   layoutName: LayoutName,
   dir: string,
   collected: string[],
+  removed: RemovedEntry[],
 ): BriefingSubagent[] {
   const isToml = layout.subagentFormat === "toml";
   const suffix = isToml ? ".toml" : ".md";
   const known = new Set(briefing.subagents.map((subagent) => subagent.name));
   const relativeOf = (name: string): string => `${layout.subagentDir}/${name}${suffix}`;
   const parse = isToml ? toSubagentFromToml : toSubagentFromMarkdown;
+  const handedOut = hasHandedOut(
+    dir,
+    listFiles(join(dir, layout.subagentDir), suffix).map((file) => `${layout.subagentDir}/${file}`),
+  );
 
-  const updated = briefing.subagents.map((subagent) => {
+  const updated: BriefingSubagent[] = [];
+  for (const subagent of briefing.subagents) {
     const relative = relativeOf(subagent.name);
+    if (!existsSync(join(dir, relative))) {
+      if (handedOut) removed.push({ kind: "subagent", name: subagent.name, path: relative });
+      else updated.push(subagent);
+      continue;
+    }
     const content = readMarkedUp(dir, relative);
-    if (content === null) return subagent;
+    if (content === null) {
+      updated.push(subagent);
+      continue;
+    }
     collected.push(relative);
-    return parse(subagent.name, content, layoutName, subagent.providerFrontmatter);
-  });
+    updated.push(parse(subagent.name, content, layoutName, subagent.providerFrontmatter));
+  }
 
   for (const file of listFiles(join(dir, layout.subagentDir), suffix)) {
     const name = basename(file, suffix);

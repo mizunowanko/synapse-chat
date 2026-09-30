@@ -35,6 +35,7 @@ export {
   emptyBriefing,
   type CollectResult,
   type MarkedUpFile,
+  type RemovedEntry,
 } from "./collect.js";
 export { parseBriefing, serializeBriefing } from "./serialize.js";
 export {

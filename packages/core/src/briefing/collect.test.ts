@@ -244,12 +244,14 @@ describe("collect", () => {
     expect(handOutAll(briefing)[".agents/skills/hand-written/SKILL.md"]).toContain("本文。");
   });
 
-  it("leaves a briefing entry alone when its handout is missing", () => {
-    // "Not on disk" is also what a fresh checkout looks like, and the briefing
-    // is the only copy of the text.
+  it("leaves a briefing entry alone when nothing shows its layout was handed out", () => {
+    // Deleting a layout's *last* skill leaves no fingerprinted handout behind,
+    // and without one "deleted" cannot be told from "never handed out".
     handOutToDisk(base);
     rmSync(join(dir, ".claude/skills/analytics-inspect"), { recursive: true });
-    expect(collect(base, "claude", dir).briefing.skills).toEqual(base.skills);
+    const result = collect(base, "claude", dir);
+    expect(result.briefing.skills).toEqual(base.skills);
+    expect(result.removed).toEqual([]);
   });
 
   it("does not mutate the briefing it was given", () => {
@@ -281,6 +283,120 @@ describe("collect", () => {
     const { briefing } = collect(base, "claude", dir);
     handOutToDisk(briefing);
     expect(detectMarkUps(briefing, dir)).toEqual([]);
+  });
+});
+
+// agents-familia#824: a handout deleted from a layout that was handed out to
+// must leave the briefing, or the deletion is undone by the next handOut.
+describe("collect — deleted handouts", () => {
+  const twoSkills: Briefing = {
+    ...base,
+    skills: [
+      ...base.skills,
+      { name: "multi-character-scene", description: "群像を書く。", body: "視点を固定する。\n" },
+    ],
+    subagents: [
+      ...base.subagents,
+      { name: "proofreader", description: "校正する。", instructions: "誤字を拾う。\n" },
+    ],
+  };
+
+  it("takes out a skill whose handout was deleted, and says so", () => {
+    handOutToDisk(twoSkills);
+    rmSync(join(dir, ".claude/skills/multi-character-scene"), { recursive: true });
+
+    const result = collect(twoSkills, "claude", dir);
+    expect(result.briefing.skills.map((skill) => skill.name)).toEqual(["analytics-inspect"]);
+    expect(result.removed).toEqual([
+      {
+        kind: "skill",
+        name: "multi-character-scene",
+        path: ".claude/skills/multi-character-scene/SKILL.md",
+      },
+    ]);
+    expect(result.collected).toEqual([]);
+    // Nobody hands it out any more.
+    expect(Object.keys(handOutAll(result.briefing))).not.toContain(
+      ".agents/skills/multi-character-scene/SKILL.md",
+    );
+  });
+
+  it("reads a deletion from the shared agy / Codex skill directory in both layouts", () => {
+    handOutToDisk(twoSkills);
+    rmSync(join(dir, ".agents/skills/multi-character-scene"), { recursive: true });
+
+    for (const layout of ["agents", "codex"] as const) {
+      const result = collect(twoSkills, layout, dir);
+      expect(result.briefing.skills.map((skill) => skill.name)).toEqual(["analytics-inspect"]);
+      expect(result.removed.map((entry) => entry.name)).toEqual(["multi-character-scene"]);
+    }
+    // The Claude copy is untouched, so collecting from Claude changes nothing.
+    expect(collect(twoSkills, "claude", dir)).toEqual({
+      briefing: twoSkills,
+      collected: [],
+      removed: [],
+    });
+  });
+
+  it("counts a written-on handout as proof of a hand-out", () => {
+    // Collecting never re-stamps the file it read, so a skill somebody edited
+    // keeps a stale fingerprint forever. It still shows handOut() wrote here.
+    handOutToDisk(twoSkills);
+    const kept = ".claude/skills/analytics-inspect/SKILL.md";
+    put(kept, `${read(kept)}\n追記。\n`);
+    rmSync(join(dir, ".claude/skills/multi-character-scene"), { recursive: true });
+
+    const result = collect(twoSkills, "claude", dir);
+    expect(result.removed.map((entry) => entry.name)).toEqual(["multi-character-scene"]);
+    expect(result.collected).toEqual([kept]);
+  });
+
+  it("takes out a subagent whose handout was deleted", () => {
+    handOutToDisk(twoSkills);
+    rmSync(join(dir, ".codex/agents/proofreader.toml"));
+
+    const result = collect(twoSkills, "codex", dir);
+    expect(result.briefing.subagents.map((subagent) => subagent.name)).toEqual(["number-cruncher"]);
+    expect(result.removed).toEqual([
+      { kind: "subagent", name: "proofreader", path: ".codex/agents/proofreader.toml" },
+    ]);
+  });
+
+  it("never takes anything out of a layout that was never handed out to", () => {
+    // The accident this must not become: an agent handed out only to Claude
+    // loses every skill the first time somebody collects from agy.
+    for (const [relative, content] of Object.entries(handOut(twoSkills, "claude"))) {
+      put(relative, content);
+    }
+
+    for (const layout of ["agents", "codex"] as const) {
+      expect(collect(twoSkills, layout, dir)).toEqual({
+        briefing: twoSkills,
+        collected: [],
+        removed: [],
+      });
+    }
+  });
+
+  it("never takes anything out on the strength of hand-written files alone", () => {
+    // A directory mid-migration: hand-written skills with no fingerprint, and a
+    // briefing that knows about more than is on disk. Nothing proves a hand-out.
+    put(".claude/skills/analytics-inspect/SKILL.md", "---\nname: analytics-inspect\n---\n\n手書き。\n");
+
+    const result = collect(twoSkills, "claude", dir);
+    expect(result.briefing.skills.map((skill) => skill.name)).toEqual([
+      "analytics-inspect",
+      "multi-character-scene",
+    ]);
+    expect(result.removed).toEqual([]);
+  });
+
+  it("never takes anything out of an empty directory", () => {
+    for (const layout of ["claude", "agents", "codex"] as const) {
+      const result = collect(twoSkills, layout, dir);
+      expect(result.briefing).toEqual(twoSkills);
+      expect(result.removed).toEqual([]);
+    }
   });
 });
 
