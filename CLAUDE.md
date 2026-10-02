@@ -26,7 +26,7 @@ docs/       プロトコル仕様・Adapter ガイド
 | インストール | `env -u npm_config_exclude_links_from_lockfile NODE_ENV=development pnpm install --config.confirmModulesPurge=false`（下の注記） |
 | 全パッケージビルド | `pnpm build` |
 | 型チェック | `pnpm typecheck` |
-| テスト実行 | `pnpm test` |
+| テスト実行 | `NODE_ENV=test pnpm test`（このマシンのシェルは `NODE_ENV=production` 固定で、そのままだと react のテストが `React.act is not a function` で落ちる — #52） |
 | Lint | `pnpm lint` |
 | API docs 生成 | `pnpm docs:api` |
 | Example アプリ起動 | `pnpm --filter @synapse-chat/example dev` |
@@ -48,7 +48,7 @@ docs/       プロトコル仕様・Adapter ガイド
 | **版** | 4 パッケージで**同じ版**（`.changeset/config.json` の `fixed`）。アプリは全部を同じ版に固定すればよく、core の型が 2 つ入ることもない |
 | **版上げ** | **PR の中で** `pnpm changeset` → `pnpm changeset version` まで済ませて、`package.json` / `CHANGELOG.md` の変更ごと commit する。未適用の changeset が残った PR は CI が落とす |
 | **publish** | main に入ると `.github/workflows/release.yml` が `pnpm release`（build + `changeset publish`）を回し、registry に無い版だけを出して、タグ（`@mizunowanko/synapse-chat-core@0.1.0` …）を push する。手で `pnpm release` しない |
-| **CI** | `.github/workflows/ci.yml`。react のテストだけは #52（`React.act is not a function`）が直るまで `continue-on-error` |
+| **CI** | `.github/workflows/ci.yml`。PR と main で build / typecheck / lint / test |
 
 Actions に「Version Packages」の PR を作らせる changesets/action の流れは使っていない（この repo は Actions に PR を作らせない設定）。
 

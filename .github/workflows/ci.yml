@@ -1,9 +1,8 @@
 # test / typecheck / build / lint を PR と main への push で走らせる（#68）。
 #
-# @mizunowanko/synapse-chat-react のテストだけは止めない（continue-on-error）。
-# react 19.2 で @testing-library/react の act が壊れていて（React.act is not a function）、
-# 70 件ほどが環境要因で落ちる（#52）。ここで止めると他の 3 パッケージの退行が見えなくなる。
-# #52 が直ったら continue-on-error を外して、react も他と同じ扱いに戻すこと。
+# react のテストも止める側に置く。手元で 70 件落ちる #52（React.act is not a function）は
+# シェルの NODE_ENV=production が原因で、React の production ビルドに act が無いだけ。
+# CI（NODE_ENV 未設定）では 128 件すべて通る。手元では `NODE_ENV=test pnpm test` で回す。
 name: CI
 
 on:
@@ -33,12 +32,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
 
-      - name: Test (core / server / mcp)
-        run: pnpm -r --filter '!@mizunowanko/synapse-chat-react' test
-
-      - name: Test (react — known failures, #52)
-        continue-on-error: true
-        run: pnpm --filter @mizunowanko/synapse-chat-react test
+      - run: pnpm test
 
       # 版上げは PR の中で済ませる（`pnpm changeset` → `pnpm changeset version`）。
       # 未適用の changeset を main に入れると、release.yml が何も publish できずに落ちる。
