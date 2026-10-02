@@ -1,5 +1,5 @@
 ---
-"@synapse-chat/server": patch
+"@mizunowanko/synapse-chat-server": patch
 ---
 
 fix(server): parse Claude's `tool_result` out of the wrapping `user` turn

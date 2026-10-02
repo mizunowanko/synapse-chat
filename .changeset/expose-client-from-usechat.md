@@ -1,5 +1,5 @@
 ---
-"@synapse-chat/react": minor
+"@mizunowanko/synapse-chat-react": minor
 ---
 
 feat(react): expose underlying `WSClient` from `useChat`

@@ -1,5 +1,5 @@
 ---
-"@synapse-chat/server": patch
+"@mizunowanko/synapse-chat-server": patch
 ---
 
 fix(claude): keep replies that arrive without deltas

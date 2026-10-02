@@ -1,5 +1,5 @@
 {
-  "name": "@synapse-chat/core",
+  "name": "@mizunowanko/synapse-chat-core",
   "version": "0.0.0",
   "description": "Shared types and interfaces for synapse-chat: StreamMessage, ImageAttachment, CLIAdapter, SessionOptions.",
   "license": "MIT",
@@ -48,6 +48,7 @@
     "briefing"
   ],
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   }
 }

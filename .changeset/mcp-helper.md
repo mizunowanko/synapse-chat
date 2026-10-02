@@ -1,6 +1,6 @@
 ---
-"@synapse-chat/mcp": minor
-"@synapse-chat/core": minor
+"@mizunowanko/synapse-chat-mcp": minor
+"@mizunowanko/synapse-chat-core": minor
 ---
 
 feat: add `@synapse-chat/mcp` — declarative MCP tool proxies + CLI settings generators

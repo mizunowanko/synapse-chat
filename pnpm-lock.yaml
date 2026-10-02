@@ -33,13 +33,13 @@ importers:
   apps/example:
     dependencies:
       '@synapse-chat/core':
-        specifier: file:../../packages/core
+        specifier: workspace:@mizunowanko/synapse-chat-core@*
         version: link:../../packages/core
       '@synapse-chat/react':
-        specifier: file:../../packages/react
+        specifier: workspace:@mizunowanko/synapse-chat-react@*
         version: link:../../packages/react
       '@synapse-chat/server':
-        specifier: file:../../packages/server
+        specifier: workspace:@mizunowanko/synapse-chat-server@*
         version: link:../../packages/server
       react:
         specifier: ^19.0.0
@@ -97,13 +97,13 @@ importers:
         specifier: ^1.29.0
         version: 1.29.0(zod@4.3.6)
       '@synapse-chat/core':
-        specifier: file:../core
+        specifier: workspace:@mizunowanko/synapse-chat-core@*
         version: link:../core
 
   packages/react:
     dependencies:
       '@synapse-chat/core':
-        specifier: file:../core
+        specifier: workspace:@mizunowanko/synapse-chat-core@*
         version: link:../core
       clsx:
         specifier: ^2.1.1
@@ -167,7 +167,7 @@ importers:
   packages/server:
     dependencies:
       '@synapse-chat/core':
-        specifier: file:../core
+        specifier: workspace:@mizunowanko/synapse-chat-core@*
         version: link:../core
 
 packages:

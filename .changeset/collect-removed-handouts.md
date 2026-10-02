@@ -1,5 +1,5 @@
 ---
-"@synapse-chat/core": minor
+"@mizunowanko/synapse-chat-core": minor
 ---
 
 fix(core/briefing): `collect()` takes out skills and subagents whose handout was deleted

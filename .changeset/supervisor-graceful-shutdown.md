@@ -1,5 +1,5 @@
 ---
-"@synapse-chat/server": minor
+"@mizunowanko/synapse-chat-server": minor
 ---
 
 `startSupervisor` adds graceful shutdown, PM worker health checks, and a restart cap.

@@ -1,6 +1,6 @@
 ---
-"@synapse-chat/core": minor
-"@synapse-chat/react": minor
+"@mizunowanko/synapse-chat-core": minor
+"@mizunowanko/synapse-chat-react": minor
 ---
 
 feat: add Chat Storage Adapter pattern for history persistence

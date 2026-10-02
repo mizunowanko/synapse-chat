@@ -187,47 +187,61 @@ pnpm -r typecheck
 pnpm lint
 ```
 
-### Using from a sibling project (e.g. vibe-admiral)
+## Installing (GitHub Packages)
 
-Consuming projects can reference synapse-chat via `file:` dependencies while the packages are not yet published to npm. Both repos should live as siblings under a shared directory (for example `~/Projects/Application/`):
+The packages are published to **GitHub Packages** under the owner scope, because GitHub
+Packages only accepts an npm scope that matches the repository owner:
 
-```
-~/Projects/Application/
-  synapse-chat/        ← this repo
-  your-app/            ← consumer (e.g. vibe-admiral)
-```
+| Import as | Published as |
+| --- | --- |
+| `@synapse-chat/core` | `@mizunowanko/synapse-chat-core` |
+| `@synapse-chat/server` | `@mizunowanko/synapse-chat-server` |
+| `@synapse-chat/react` | `@mizunowanko/synapse-chat-react` |
+| `@synapse-chat/mcp` | `@mizunowanko/synapse-chat-mcp` |
 
-In the consumer's `package.json`:
+Install them under the import names through an npm alias, so no `import` changes.
+All packages share one version; pin the same exact version for each:
 
 ```json
 {
   "dependencies": {
-    "@synapse-chat/core":   "file:../synapse-chat/packages/core",
-    "@synapse-chat/react":  "file:../synapse-chat/packages/react",
-    "@synapse-chat/server": "file:../synapse-chat/packages/server"
+    "@synapse-chat/core":   "npm:@mizunowanko/synapse-chat-core@0.1.0",
+    "@synapse-chat/react":  "npm:@mizunowanko/synapse-chat-react@0.1.0",
+    "@synapse-chat/server": "npm:@mizunowanko/synapse-chat-server@0.1.0"
   }
 }
 ```
 
-Before running the consumer's `npm install`, build the synapse-chat packages once:
+GitHub Packages requires a token even to read public packages. Point the scope at it in
+the consumer's `.npmrc` and read the token from the environment — never commit the token:
 
-```bash
-cd ~/Projects/Application/synapse-chat
-pnpm install
-pnpm -r build
+```ini
+@mizunowanko:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
 ```
 
-Then `npm install` in the consumer picks up the pre-built `dist/` output of each package.
+```bash
+NODE_AUTH_TOKEN=$(gh auth token) pnpm install   # the token needs read:packages
+```
+
+In GitHub Actions, pass `secrets.GITHUB_TOKEN` as `NODE_AUTH_TOKEN` and grant the job
+`permissions: packages: read`.
 
 ## Releasing
 
-Versioning is managed by [changesets](https://github.com/changesets/changesets):
+Versioning is managed by [changesets](https://github.com/changesets/changesets). **The
+version is bumped inside the PR**, and merging it to `main` publishes:
 
 ```bash
 pnpm changeset          # record a change
-pnpm version            # bump versions + write CHANGELOG
-pnpm release            # build + publish (publish target not wired yet)
+pnpm version            # apply it: bump versions + write CHANGELOG (commit this in the same PR)
 ```
+
+On push to `main`, `.github/workflows/release.yml` runs `pnpm release` (build +
+`changeset publish`), which publishes every version not yet on the registry and pushes
+the git tags (`@mizunowanko/synapse-chat-core@0.1.0`, …). CI rejects a PR that still
+carries an unapplied changeset. See `CLAUDE.md` for changing synapse-chat and an app
+together.
 
 ## License
 

@@ -1,5 +1,5 @@
 ---
-"@synapse-chat/react": minor
+"@mizunowanko/synapse-chat-react": minor
 ---
 
 feat(react): add CompactionBadge component and auto-render on compaction system messages

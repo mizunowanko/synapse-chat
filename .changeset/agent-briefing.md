@@ -1,5 +1,5 @@
 ---
-"@synapse-chat/core": minor
+"@mizunowanko/synapse-chat-core": minor
 ---
 
 feat(core): Agent Briefing — one set of instructions, handed out to three providers

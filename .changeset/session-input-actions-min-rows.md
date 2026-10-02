@@ -1,5 +1,5 @@
 ---
-"@synapse-chat/react": minor
+"@mizunowanko/synapse-chat-react": minor
 ---
 
 `SessionInput` に `actions` と `minRows` を追加。

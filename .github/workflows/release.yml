@@ -1,0 +1,60 @@
+# main に入った版上げを GitHub Packages へ publish し、git のタグを打つ（#68）。
+#
+# 版上げ（changeset version）は PR の中で済ませる運用で、ここでは publish だけをする。
+# changesets/action の「Version Packages」PR は使わない — この repo は Actions に
+# PR を作らせない設定（can_approve_pull_request_reviews=false）のままにしている。
+#
+# `changeset publish` は registry に無い版だけを publish する。版が上がっていない
+# push では何もせずに終わる。
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # タグの push
+  packages: write   # GitHub Packages への publish
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@mizunowanko'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Refuse unapplied changesets
+        run: |
+          pending=$(find .changeset -name '*.md' ! -name README.md)
+          if [ -n "$pending" ]; then
+            echo "::error::未適用の changeset が main に入っています。\`pnpm version\` を PR で実行してください:"
+            echo "$pending"
+            exit 1
+          fi
+
+      - name: Configure git identity (changeset publish creates annotated tags)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm release
+
+      - name: Push tags
+        run: git push origin --tags

@@ -1,5 +1,5 @@
 ---
-"@synapse-chat/server": minor
+"@mizunowanko/synapse-chat-server": minor
 ---
 
 feat(claude): surface `conversation_reset` as a `system` message

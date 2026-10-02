@@ -1,5 +1,5 @@
 ---
-"@synapse-chat/server": minor
+"@mizunowanko/synapse-chat-server": minor
 ---
 
 Add `gemmaAdapter` for Ollama/Gemma local LLM support via `CLIAdapter` interface.

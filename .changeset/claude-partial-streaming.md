@@ -1,6 +1,6 @@
 ---
-"@synapse-chat/server": minor
-"@synapse-chat/core": patch
+"@mizunowanko/synapse-chat-server": minor
+"@mizunowanko/synapse-chat-core": patch
 ---
 
 feat(claude): token-level streaming via `--include-partial-messages`

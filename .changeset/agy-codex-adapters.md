@@ -1,6 +1,6 @@
 ---
-"@synapse-chat/server": minor
-"@synapse-chat/core": minor
+"@mizunowanko/synapse-chat-server": minor
+"@mizunowanko/synapse-chat-core": minor
 ---
 
 Add `agy` (Antigravity CLI) and `codex` (Codex CLI) adapters

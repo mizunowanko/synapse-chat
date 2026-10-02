@@ -1,5 +1,5 @@
 ---
-"@synapse-chat/react": minor
+"@mizunowanko/synapse-chat-react": minor
 ---
 
 Add `SystemMessageBadge` component for rendering system message subtypes as styled badges.

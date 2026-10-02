@@ -19,9 +19,8 @@ Node.js runtime pieces for wiring an AI CLI subprocess (Claude, Gemini, …) to 
 ## Install
 
 ```bash
-npm install @synapse-chat/server @synapse-chat/core
-# or
-pnpm add @synapse-chat/server @synapse-chat/core
+# published to GitHub Packages — see the repository README for .npmrc
+pnpm add @synapse-chat/server@npm:@mizunowanko/synapse-chat-server@<version> @synapse-chat/core@npm:@mizunowanko/synapse-chat-core@<version>
 ```
 
 ## Usage

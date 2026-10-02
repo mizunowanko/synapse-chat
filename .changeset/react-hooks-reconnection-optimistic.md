@@ -1,5 +1,5 @@
 ---
-"@synapse-chat/react": minor
+"@mizunowanko/synapse-chat-react": minor
 ---
 
 feat(react): connection-status hook + optimistic message queue with reconnect-backed retry

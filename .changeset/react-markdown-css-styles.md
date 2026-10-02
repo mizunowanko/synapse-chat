@@ -1,5 +1,5 @@
 ---
-"@synapse-chat/react": minor
+"@mizunowanko/synapse-chat-react": minor
 ---
 
 Add default Markdown CSS styles via `@synapse-chat/react/styles` subpath export.
