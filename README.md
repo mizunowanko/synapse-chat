@@ -234,7 +234,7 @@ version is bumped inside the PR**, and merging it to `main` publishes:
 
 ```bash
 pnpm changeset          # record a change
-pnpm version            # apply it: bump versions + write CHANGELOG (commit this in the same PR)
+pnpm changeset version            # apply it: bump versions + write CHANGELOG (commit this in the same PR)
 ```
 
 On push to `main`, `.github/workflows/release.yml` runs `pnpm release` (build +

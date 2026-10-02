@@ -41,7 +41,7 @@ jobs:
         run: |
           pending=$(find .changeset -name '*.md' ! -name README.md)
           if [ -n "$pending" ]; then
-            echo "::error::未適用の changeset が main に入っています。\`pnpm version\` を PR で実行してください:"
+            echo "::error::未適用の changeset が main に入っています。\`pnpm changeset version\` を PR で実行してください:"
             echo "$pending"
             exit 1
           fi

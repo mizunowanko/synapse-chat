@@ -40,14 +40,14 @@ jobs:
         continue-on-error: true
         run: pnpm --filter @mizunowanko/synapse-chat-react test
 
-      # 版上げは PR の中で済ませる（`pnpm changeset` → `pnpm version`）。
+      # 版上げは PR の中で済ませる（`pnpm changeset` → `pnpm changeset version`）。
       # 未適用の changeset を main に入れると、release.yml が何も publish できずに落ちる。
       - name: Changesets are applied
         if: github.event_name == 'pull_request'
         run: |
           pending=$(find .changeset -name '*.md' ! -name README.md)
           if [ -n "$pending" ]; then
-            echo "::error::未適用の changeset があります。PR の中で \`pnpm version\` を実行して版を上げてください:"
+            echo "::error::未適用の changeset があります。PR の中で \`pnpm changeset version\` を実行して版を上げてください:"
             echo "$pending"
             exit 1
           fi
