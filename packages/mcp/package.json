@@ -1,6 +1,6 @@
 {
   "name": "@mizunowanko/synapse-chat-mcp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "MCP (Model Context Protocol) helpers for synapse-chat: declarative HTTP → MCP tool proxies, stdio server scaffold, and Claude Code / Gemini CLI settings generators.",
   "license": "MIT",
   "type": "module",
