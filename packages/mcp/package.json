@@ -1,6 +1,6 @@
 {
-  "name": "@synapse-chat/mcp",
-  "version": "0.0.0",
+  "name": "@mizunowanko/synapse-chat-mcp",
+  "version": "0.1.0",
   "description": "MCP (Model Context Protocol) helpers for synapse-chat: declarative HTTP → MCP tool proxies, stdio server scaffold, and Claude Code / Gemini CLI settings generators.",
   "license": "MIT",
   "type": "module",
@@ -47,12 +47,13 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@synapse-chat/core": "file:../core"
+    "@synapse-chat/core": "workspace:@mizunowanko/synapse-chat-core@*"
   },
   "engines": {
     "node": ">=20"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   }
 }

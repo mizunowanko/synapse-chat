@@ -1,6 +1,6 @@
 {
-  "name": "@synapse-chat/react",
-  "version": "0.0.0",
+  "name": "@mizunowanko/synapse-chat-react",
+  "version": "0.1.0",
   "description": "React chat UI primitives (ChatMessage, ToolUseGroup, SessionInput) + WebSocket client + useChat hook for synapse-chat.",
   "license": "MIT",
   "type": "module",
@@ -35,7 +35,9 @@
     "!src/**/*.test.tsx",
     "!src/test-setup.ts"
   ],
-  "sideEffects": ["**/*.css"],
+  "sideEffects": [
+    "**/*.css"
+  ],
   "scripts": {
     "build": "tsc -b && mkdir -p dist/styles && cp src/styles/chat-message.css dist/styles/",
     "clean": "rm -rf dist *.tsbuildinfo",
@@ -50,7 +52,7 @@
     "stream-json"
   ],
   "dependencies": {
-    "@synapse-chat/core": "file:../core",
+    "@synapse-chat/core": "workspace:@mizunowanko/synapse-chat-core@*",
     "clsx": "^2.1.1",
     "lucide-react": "^0.468.0",
     "mdast-util-find-and-replace": "^3.0.2",
@@ -78,6 +80,7 @@
     "remark-stringify": "^11.0.0"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   }
 }

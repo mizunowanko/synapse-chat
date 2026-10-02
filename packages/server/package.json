@@ -1,6 +1,6 @@
 {
-  "name": "@synapse-chat/server",
-  "version": "0.0.0",
+  "name": "@mizunowanko/synapse-chat-server",
+  "version": "0.1.0",
   "description": "Node.js CLI process manager + stream parser + supervisor for synapse-chat.",
   "license": "MIT",
   "type": "module",
@@ -50,12 +50,13 @@
     "cli-subprocess"
   ],
   "dependencies": {
-    "@synapse-chat/core": "file:../core"
+    "@synapse-chat/core": "workspace:@mizunowanko/synapse-chat-core@*"
   },
   "engines": {
     "node": ">=20"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   }
 }

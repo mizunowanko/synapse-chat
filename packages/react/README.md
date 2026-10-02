@@ -12,7 +12,8 @@ React primitives for building AI chat UIs on top of `@synapse-chat/core` stream 
 ## Install
 
 ```bash
-pnpm add @synapse-chat/react @synapse-chat/core
+# published to GitHub Packages — see the repository README for .npmrc
+pnpm add @synapse-chat/react@npm:@mizunowanko/synapse-chat-react@<version> @synapse-chat/core@npm:@mizunowanko/synapse-chat-core@<version>
 # peer deps
 pnpm add react react-dom
 ```

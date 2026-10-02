@@ -1,0 +1,53 @@
+# test / typecheck / build / lint を PR と main への push で走らせる（#68）。
+#
+# @mizunowanko/synapse-chat-react のテストだけは止めない（continue-on-error）。
+# react 19.2 で @testing-library/react の act が壊れていて（React.act is not a function）、
+# 70 件ほどが環境要因で落ちる（#52）。ここで止めると他の 3 パッケージの退行が見えなくなる。
+# #52 が直ったら continue-on-error を外して、react も他と同じ扱いに戻すこと。
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm lint
+
+      - name: Test (core / server / mcp)
+        run: pnpm -r --filter '!@mizunowanko/synapse-chat-react' test
+
+      - name: Test (react — known failures, #52)
+        continue-on-error: true
+        run: pnpm --filter @mizunowanko/synapse-chat-react test
+
+      # 版上げは PR の中で済ませる（`pnpm changeset` → `pnpm changeset version`）。
+      # 未適用の changeset を main に入れると、release.yml が何も publish できずに落ちる。
+      - name: Changesets are applied
+        if: github.event_name == 'pull_request'
+        run: |
+          pending=$(find .changeset -name '*.md' ! -name README.md)
+          if [ -n "$pending" ]; then
+            echo "::error::未適用の changeset があります。PR の中で \`pnpm changeset version\` を実行して版を上げてください:"
+            echo "$pending"
+            exit 1
+          fi
