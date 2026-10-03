@@ -1,6 +1,6 @@
 {
   "name": "@mizunowanko/synapse-chat-react",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "React chat UI primitives (ChatMessage, ToolUseGroup, SessionInput) + WebSocket client + useChat hook for synapse-chat.",
   "license": "MIT",
   "type": "module",
