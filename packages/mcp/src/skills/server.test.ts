@@ -68,7 +68,7 @@ describe("instructions", () => {
 });
 
 describe("tools/list", () => {
-  it("marks the read tools readOnlyHint (non-interactive Codex refuses them otherwise)", async () => {
+  it("annotates every tool so non-interactive Codex runs them without approval", async () => {
     const { client } = await connect(agentScope("A"));
     const { tools } = await client.listTools();
     const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
@@ -76,6 +76,8 @@ describe("tools/list", () => {
     expect(byName.list_skills?.annotations?.readOnlyHint).toBe(true);
     expect(byName.get_skill?.annotations?.readOnlyHint).toBe(true);
     expect(byName.put_skill?.annotations?.readOnlyHint).toBe(false);
+    // Without these, `codex exec` refuses put_skill: "requires approval, but approval policy is never".
+    expect(byName.put_skill?.annotations).toMatchObject({ destructiveHint: false, openWorldHint: false });
   });
 
   it("hides put_skill without an agent, or when read-only", async () => {
