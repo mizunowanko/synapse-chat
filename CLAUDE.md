@@ -13,9 +13,10 @@ packages/
   core/     @synapse-chat/core    — 共通型・インターフェース（StreamMessage, CLIAdapter 等）
   react/    @synapse-chat/react   — React UI プリミティブ + WS クライアント + useChat hook
   server/   @synapse-chat/server  — Node.js プロセスマネージャ + ストリームパーサ + supervisor
+  mcp/      @synapse-chat/mcp     — MCP ヘルパー + スキルを SQLite から配る MCP サーバー（`./skills`、bin `synapse-skills`。docs/design/skills-mcp.md）
 apps/
   example/  @synapse-chat/example — Vite + React + ws の動作サンプル（非公開）
-docs/       プロトコル仕様・Adapter ガイド
+docs/       プロトコル仕様・Adapter ガイド・design doc（docs/design/）
 .changeset/ Changesets 管理
 ```
 

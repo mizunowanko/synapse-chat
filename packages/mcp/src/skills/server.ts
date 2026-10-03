@@ -127,6 +127,13 @@ export function createSkillsToolHandler(options: SkillsServerOptions) {
   const { store, viewer, cacheRoot } = options;
   const writable = (options.writable ?? true) && viewer.agent !== "";
   const tools = writable ? [LIST_SKILLS, GET_SKILL, PUT_SKILL] : [LIST_SKILLS, GET_SKILL];
+  const log = (entry: Record<string, unknown>): void => {
+    if (!options.logFile) return;
+    fs.appendFileSync(
+      options.logFile,
+      JSON.stringify({ t: new Date().toISOString(), pid: process.pid, viewer, ...entry }) + "\n",
+    );
+  };
 
   function call(name: string, args: Record<string, unknown>): CallToolResult {
     if (name === "list_skills") {
@@ -204,6 +211,7 @@ export function createSkillsToolHandler(options: SkillsServerOptions) {
 
   return {
     tools,
+    log,
     call(name: string, args: Record<string, unknown>): CallToolResult {
       let result: CallToolResult;
       try {
@@ -211,12 +219,7 @@ export function createSkillsToolHandler(options: SkillsServerOptions) {
       } catch (e) {
         result = text(e instanceof Error ? e.message : String(e), true);
       }
-      if (options.logFile) {
-        fs.appendFileSync(
-          options.logFile,
-          JSON.stringify({ t: new Date().toISOString(), pid: process.pid, tool: name, args, isError: result.isError === true, viewer }) + "\n",
-        );
-      }
+      log({ event: "tools/call", tool: name, args, isError: result.isError === true });
       return result;
     },
   };
@@ -229,7 +232,12 @@ export function createSkillsMcpServer(options: SkillsServerOptions): SkillsServe
     { name: SKILLS_SERVER_NAME, version: SKILLS_SERVER_VERSION },
     { capabilities: { tools: {} }, instructions },
   );
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: handler.tools }));
+  server.oninitialized = () =>
+    handler.log({ event: "initialized", client: server.getClientVersion(), cwd: process.cwd() });
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    handler.log({ event: "tools/list" });
+    return { tools: handler.tools };
+  });
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const raw = req.params.arguments;
     const args = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};

@@ -133,8 +133,9 @@ describe("get_skill", () => {
     const logFile = path.join(dir, "calls.jsonl");
     const { call } = await connect(agentScope("A"), { logFile });
     await call("get_skill", { name: "issue" });
-    const line = JSON.parse(fs.readFileSync(logFile, "utf8").trim()) as { tool: string; args: { name: string } };
-    expect(line).toMatchObject({ tool: "get_skill", args: { name: "issue" } });
+    const lines = fs.readFileSync(logFile, "utf8").trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(lines.map((l) => l.event)).toEqual(["initialized", "tools/call"]);
+    expect(lines[1]).toMatchObject({ tool: "get_skill", args: { name: "issue" }, viewer: { agent: "A" } });
   });
 });
 
