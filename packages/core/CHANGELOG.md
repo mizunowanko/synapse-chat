@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-core
 
+## 0.3.0
+
+### Minor Changes
+
+- core/briefing: `collectInstructions()` / `handOutInstructionFiles()` を足す。指示ファイル（`CLAUDE.md` / `AGENTS.md`）だけを回収・配布し、skill / subagent の Handout には触れない。skill を MCP（`@synapse-chat/mcp/skills`）で配るアプリ向け。
+
 ## 0.2.0
 
 ## 0.1.0

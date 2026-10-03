@@ -4,9 +4,9 @@ import { dirname, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { collect, detectMarkUps, emptyBriefing } from "./collect.js";
+import { collect, collectInstructions, detectMarkUps, emptyBriefing } from "./collect.js";
 import { withFingerprint } from "./fingerprint.js";
-import { handOut, handOutAll } from "./hand-out.js";
+import { handOut, handOutAll, handOutInstructionFiles } from "./hand-out.js";
 import type { Briefing } from "./types.js";
 
 const base: Briefing = {
@@ -519,5 +519,50 @@ describe("collect — bootstrapping a directory that was never handed out", () =
     const { briefing, collected } = collect(emptyBriefing("Amanatsu"), "claude", dir);
     expect(collected).toEqual([]);
     expect(briefing).toEqual(emptyBriefing("Amanatsu"));
+  });
+});
+
+describe("collectInstructions", () => {
+  it("carries a write-in on CLAUDE.md, and nothing else", () => {
+    handOutToDisk(base);
+    put("CLAUDE.md", handOut(base, "claude")["CLAUDE.md"]!.replace("数字を読む。", "数字を丁寧に読む。"));
+
+    const { briefing, collected, removed } = collectInstructions(base, "claude", dir);
+    expect(collected).toEqual(["CLAUDE.md"]);
+    expect(removed).toEqual([]);
+    expect(briefing.sections[0]?.body).toBe("数字を丁寧に読む。\n");
+    expect(handOutInstructionFiles(briefing)["AGENTS.md"]).toContain("数字を丁寧に読む。");
+  });
+
+  it("never reads a skill or subagent handout, even a new or broken one", () => {
+    handOutToDisk(base);
+    put(".claude/skills/dropped-in/SKILL.md", "---\nname: dropped-in\ndescription: 足した\n---\n本文\n");
+    put(".claude/skills/analytics-inspect/SKILL.md", "書き換えた\n");
+    put(".codex/agents/broken.toml", "this is = = not toml");
+
+    for (const layout of ["claude", "agents", "codex"] as const) {
+      const { briefing, collected } = collectInstructions(base, layout, dir);
+      expect(collected).toEqual([]);
+      expect(briefing).toEqual(base);
+    }
+  });
+
+  it("leaves the briefing's skills alone when their handouts are gone", () => {
+    handOutToDisk(base);
+    rmSync(join(dir, ".claude/skills/analytics-inspect"), { recursive: true });
+
+    const { briefing, removed } = collectInstructions(base, "claude", dir);
+    expect(removed).toEqual([]);
+    expect(briefing.skills).toEqual(base.skills);
+  });
+
+  it("bootstraps from a hand-written instruction file", () => {
+    put("CLAUDE.md", "# アマナツ\n\n分析担当。\n\n## 役割\n\n数字を読む。\n");
+    put(".claude/skills/s/SKILL.md", "---\nname: s\ndescription: d\n---\nb\n");
+
+    const { briefing, collected } = collectInstructions(emptyBriefing("Amanatsu"), "claude", dir);
+    expect(collected).toEqual(["CLAUDE.md"]);
+    expect(briefing.role).toBe("分析担当。");
+    expect(briefing.skills).toEqual([]);
   });
 });

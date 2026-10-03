@@ -123,3 +123,21 @@ export function handOutAll(
   }
   return merged;
 }
+
+/**
+ * The instruction files alone, for every layout in `layouts` — what
+ * {@link handOutAll} gives back for a briefing with no skills and no subagents.
+ * `AGENTS.md` is shared by agy and Codex and comes back once.
+ *
+ * For an app that hands skills out some other way and keeps only the
+ * instruction file in step (pairs with `collectInstructions`).
+ */
+export function handOutInstructionFiles(
+  briefing: Briefing,
+  layouts: readonly LayoutName[] = LAYOUT_NAMES,
+): HandoutFiles {
+  const content = withFingerprint(handOutInstructions(briefing));
+  const files: HandoutFiles = {};
+  for (const layoutName of layouts) files[LAYOUTS[layoutName].instructionFile] = content;
+  return files;
+}

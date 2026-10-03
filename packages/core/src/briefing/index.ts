@@ -13,6 +13,7 @@
  *   handOutAll(briefing)           every layout at once, shared paths checked
  *   detectMarkUps(briefing, dir)   which handouts somebody has written on
  *   collect(briefing, layout, dir) read those write-ins back into the briefing
+ *   collectInstructions / handOutInstructionFiles   the same, instruction file only
  *   emptyBriefing(name)            something to collect a legacy directory into
  */
 
@@ -28,9 +29,10 @@ export type {
 } from "./types.js";
 export { LAYOUT_NAMES, isLayoutName } from "./types.js";
 export { LAYOUTS, type Layout } from "./layouts.js";
-export { handOut, handOutAll, handOutInstructions } from "./hand-out.js";
+export { handOut, handOutAll, handOutInstructionFiles, handOutInstructions } from "./hand-out.js";
 export {
   collect,
+  collectInstructions,
   detectMarkUps,
   emptyBriefing,
   type CollectResult,
