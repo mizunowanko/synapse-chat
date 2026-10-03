@@ -1,6 +1,6 @@
 {
   "name": "@mizunowanko/synapse-chat-server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Node.js CLI process manager + stream parser + supervisor for synapse-chat.",
   "license": "MIT",
   "type": "module",

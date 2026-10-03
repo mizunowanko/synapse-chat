@@ -158,6 +158,40 @@ export function collect(briefing: Briefing, layoutName: LayoutName, dir: string)
   const next: Briefing = structuredClone(briefing);
   const collected: string[] = [];
   const removed: RemovedEntry[] = [];
+  collectInstructionFile(next, layout, dir, collected);
+
+  next.skills = collectSkills(next, layout, layoutName, dir, collected, removed);
+  next.subagents = collectSubagents(next, layout, layoutName, dir, collected, removed);
+
+  return { briefing: next, collected, removed };
+}
+
+/**
+ * {@link collect} for the instruction file alone: the title, role, sections and
+ * rules, read from `instructionFile` (and a legacy rules directory while
+ * bootstrapping). **Skill and subagent handouts are not read** — the briefing's
+ * `skills` / `subagents` come back exactly as given, and nothing is ever
+ * reported `removed`.
+ *
+ * For an app that hands skills out some other way (an MCP server — see
+ * `@synapse-chat/mcp/skills`) and keeps only the instruction file in step. It
+ * never opens a file under `skillDir` / `subagentDir`, so a malformed skill or
+ * subagent there cannot stop the instruction file from being collected.
+ */
+export function collectInstructions(
+  briefing: Briefing,
+  layoutName: LayoutName,
+  dir: string,
+): CollectResult {
+  const layout = LAYOUTS[layoutName];
+  const next: Briefing = structuredClone(briefing);
+  const collected: string[] = [];
+  collectInstructionFile(next, layout, dir, collected);
+  return { briefing: next, collected, removed: [] };
+}
+
+/** The instruction-file half of {@link collect}, shared with {@link collectInstructions}. */
+function collectInstructionFile(next: Briefing, layout: Layout, dir: string, collected: string[]): void {
   // Nothing in the briefing describes an instruction file yet, so whatever is
   // on disk is new rather than stale — even if we are the ones who wrote it.
   const instructionsAreNew =
@@ -176,11 +210,6 @@ export function collect(briefing: Briefing, layoutName: LayoutName, dir: string)
   } else if (legacyRules.length > 0) {
     mergeRules(next, legacyRules);
   }
-
-  next.skills = collectSkills(next, layout, layoutName, dir, collected, removed);
-  next.subagents = collectSubagents(next, layout, layoutName, dir, collected, removed);
-
-  return { briefing: next, collected, removed };
 }
 
 /**

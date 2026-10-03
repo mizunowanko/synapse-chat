@@ -42,6 +42,8 @@ import {
 | `handOutAll(briefing, layouts?)` | Briefing → Handout | 全 Layout に配る。共有パスが食い違ったら throw |
 | `detectMarkUps(briefing, dir)` | — | 書き込まれた Handout を列挙する |
 | `collect(briefing, layoutName, dir)` | Handout → Briefing | 書き込みを Briefing に回収する。消された Handout のエントリは外して `removed` で返す |
+| `collectInstructions(briefing, layoutName, dir)` | Handout → Briefing | 指示ファイルだけを回収する。skill / subagent の Handout は開かず、Briefing の `skills` / `subagents` は渡したまま返す（`removed` は常に空） |
+| `handOutInstructionFiles(briefing, layouts?)` | Briefing → Handout | 指示ファイルだけを配る。skill / subagent を別の手段（`@synapse-chat/mcp/skills` の MCP サーバーなど）で配るアプリ用 |
 | `emptyBriefing(name)` | — | 空の Briefing。まだ配ったことのないディレクトリの取り込み先 |
 | `parseBriefing` / `serializeBriefing` | — | `<name>.briefing.yaml` との相互変換 |
 

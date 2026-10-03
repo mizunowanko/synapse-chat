@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { stripFingerprint } from "./fingerprint.js";
-import { handOut, handOutAll, handOutInstructions } from "./hand-out.js";
+import { handOut, handOutAll, handOutInstructionFiles, handOutInstructions } from "./hand-out.js";
 import type { Briefing } from "./types.js";
 
 const briefing: Briefing = {
@@ -141,5 +141,17 @@ describe("handOutAll", () => {
       ],
     };
     expect(() => handOutAll(diverging)).toThrow(/disagree on \.agents\/skills/);
+  });
+});
+
+describe("handOutInstructionFiles", () => {
+  it("is handOutAll without the skills and subagents", () => {
+    const files = handOutInstructionFiles(briefing);
+    expect(Object.keys(files).sort()).toEqual(["AGENTS.md", "CLAUDE.md"]);
+    expect(files).toEqual(handOutAll({ ...briefing, skills: [], subagents: [] }));
+  });
+
+  it("hands out only the layouts asked for", () => {
+    expect(Object.keys(handOutInstructionFiles(briefing, ["codex"]))).toEqual(["AGENTS.md"]);
   });
 });
