@@ -1,7 +1,7 @@
 {
   "name": "@mizunowanko/synapse-chat-mcp",
   "version": "0.1.0",
-  "description": "MCP (Model Context Protocol) helpers for synapse-chat: declarative HTTP → MCP tool proxies, stdio server scaffold, and Claude Code / Gemini CLI settings generators.",
+  "description": "MCP (Model Context Protocol) helpers for synapse-chat: declarative HTTP → MCP tool proxies, stdio server scaffold, Claude Code / Gemini CLI settings generators, and a skills server that hands SQLite-stored skills to Claude Code / Codex / agy.",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -23,7 +23,14 @@
     "./generators": {
       "types": "./dist/generators/index.d.ts",
       "default": "./dist/generators/index.js"
+    },
+    "./skills": {
+      "types": "./dist/skills/index.d.ts",
+      "default": "./dist/skills/index.js"
     }
+  },
+  "bin": {
+    "synapse-skills": "./dist/skills/cli.js"
   },
   "files": [
     "dist",
@@ -43,7 +50,8 @@
     "model-context-protocol",
     "stdio",
     "http-proxy",
-    "cli-tool"
+    "cli-tool",
+    "skills"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
