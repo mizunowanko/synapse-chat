@@ -57,7 +57,7 @@
 - **`put_skill` には書き込み先を指す引数が無い。** 階層は起動引数の `--agent` / `--desk` からしか決まらないので、ほかのエージェントや全員の階層を名指しする手段がそもそも無い。規則は `scope.ts` の `mcpWriteRefusal()` 1 か所にある
 - `--agent` の無いセッションと `--read-only` のセッションには `put_skill` を**出さない**
 - これは事故を防ぐための線で、悪意への防御ではない。シェルが使えるエージェントは CLI も DB ファイルも触れる
-- **非対話の Codex（`codex exec`）は `put_skill` を呼べない**（下の「罠」）。それでよいことにした。スキルを書くのは、人が見ている対話セッションか、CLI でやる仕事
+- **非対話の Codex（`codex exec`）も `put_skill` を呼べる。** `put_skill` に `destructiveHint: false` / `openWorldHint: false` を付けてあるので承認を求められない（annotations を外すと `requires approval, but approval policy is never` で落ちる。Codex 0.153 で実測）。書けるのは自分の階層だけで、前の版も残るので、承認なしで通してよいことにした
 
 ## どのエージェントか（起動引数）
 
@@ -97,7 +97,7 @@ SQLite は WAL・`busy_timeout = 5000`。セッションの数だけサーバー
 |---|---|---|
 | `list_skills` | `readOnlyHint: true` | 名前・版・階層・説明 |
 | `get_skill` | `readOnlyHint: true` | 本文と、付属ファイルの絶対パス |
-| `put_skill` | `readOnlyHint: false`, `destructiveHint: false` | 自分の階層に新しい版を書く |
+| `put_skill` | `readOnlyHint: false`, `destructiveHint: false`, `openWorldHint: false` | 自分の階層に新しい版を書く |
 
 ## 各 CLI への登録
 
@@ -116,7 +116,7 @@ Claude で `--permission-mode` を `bypassPermissions` にしないなら、`--a
 ## 罠
 
 - **Codex は MCP の instructions をモデルに渡さず、MCP のツールを常に `tool_search` の奥に隠す。** `AGENTS.md` の案内が無いとスキルの存在を知らない
-- **非対話の Codex は、`readOnlyHint` の無い MCP ツールを承認待ちで落とす**（approval policy が never）。`list_skills` / `get_skill` に付いているのはこのため。`put_skill` には付けられない
+- **非対話の Codex は、annotations の無い MCP ツールを承認待ちで落とす**（approval policy が never）。`list_skills` / `get_skill` には `readOnlyHint: true`、`put_skill` には `destructiveHint: false` / `openWorldHint: false` を付けてある。annotations を消すと Codex から使えなくなる
 - **ファイル版と MCP 版のスキルが両方あると、どちらが発動するか分からない。** DB に入れたスキルは、ファイル版を消す
 - **`codex exec` は stdin が開いていると待ち続ける。** 非対話で回すときは `< /dev/null`
 - **agy は plugin のディレクトリを cwd にしてサーバーを起動する。** パスは全部絶対パスで書く
