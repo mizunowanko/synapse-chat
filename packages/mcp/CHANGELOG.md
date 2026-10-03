@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.2.0
+
+### Minor Changes
+
+- スキルを SQLite に入れて stdio MCP で配る `@synapse-chat/mcp/skills` と、管理用 CLI `synapse-skills` を追加（#73）。階層（全員 → エージェント → Desk）、版と削除の印、付属ファイルの書き出し（`~/.cache/synapse-skills/<skill>@<版>/`）、`list_skills` / `get_skill` / `put_skill`、Claude Code / Codex / agy への登録の生成。Node 22.13 以上（`node:sqlite`）。
+
 ## 0.1.0
 
 ### Minor Changes

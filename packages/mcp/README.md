@@ -75,6 +75,23 @@ spawn("claude", ["-p", "List open duties"], { cwd: worktreePath });
 
 See [`docs/mcp-helper-guide.md`](../../docs/mcp-helper-guide.md) for the full walkthrough.
 
+## Skills server (`@synapse-chat/mcp/skills`, `synapse-skills`)
+
+Agent skills (`SKILL.md` + attached files) kept in one SQLite file and handed to Claude Code / Codex / agy by a stdio MCP server started per CLI session. Tiers: everyone → agent → desk (the lower tier wins). Needs Node 22.13+ (`node:sqlite`).
+
+```bash
+synapse-skills import ./skills --global --db /abs/skills.db          # bring existing skill dirs in
+synapse-skills import ./my-skills --agent Tsukuyo --db /abs/skills.db
+synapse-skills list --agent Tsukuyo --db /abs/skills.db
+synapse-skills register claude --agent Tsukuyo --db /abs/skills.db    # JSON for `claude --mcp-config`
+```
+
+```ts
+import { claudeSkillsMcpConfig, codexSkillsConfigArgs, agySkillsPluginFiles, SKILLS_AGENTS_MD_GUIDANCE } from "@synapse-chat/mcp/skills";
+```
+
+Design, write rules and the per-CLI registration: [`docs/design/skills-mcp.md`](../../docs/design/skills-mcp.md).
+
 ## Design notes
 
 - **Input schemas are JSON Schema.** No Zod / TypeBox lock-in. The MCP SDK accepts JSON Schema verbatim, and this keeps the door open for OpenAPI → MCP generation.
