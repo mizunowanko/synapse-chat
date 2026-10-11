@@ -14,6 +14,7 @@ packages/
   react/    @synapse-chat/react   — React UI プリミティブ + WS クライアント + useChat hook
   server/   @synapse-chat/server  — Node.js プロセスマネージャ + ストリームパーサ + supervisor
   mcp/      @synapse-chat/mcp     — MCP ヘルパー + スキルを SQLite から配る MCP サーバー（`./skills`、bin `synapse-skills`。docs/design/skills-mcp.md）
+                                    + 指示書を同じ SQLite から起動時に配る（`./instructions`、bin `synapse-instructions`。docs/design/instructions.md）
 apps/
   example/  @synapse-chat/example — Vite + React + ws の動作サンプル（非公開）
 docs/       プロトコル仕様・Adapter ガイド・design doc（docs/design/）

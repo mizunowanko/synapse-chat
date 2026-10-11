@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { loadSqlite } from "../sqlite.js";
 import {
   assertSkillName,
   visibleScopes,
@@ -59,20 +60,6 @@ export interface PutSkillResult {
   readonly record: SkillRecord;
   /** `false` when the input matched the tier's latest version and nothing was written. */
   readonly changed: boolean;
-}
-
-/**
- * `node:sqlite` is loaded at run time rather than imported: it exists only as
- * `node:sqlite` (no bare `sqlite` alias), and bundlers / vite-node that strip
- * the `node:` prefix fail to resolve a static import of it. This also gives a
- * readable error on a Node without it.
- */
-function loadSqlite(): typeof import("node:sqlite") {
-  const mod = (process as { getBuiltinModule?: (id: string) => unknown }).getBuiltinModule?.("node:sqlite");
-  if (!mod) {
-    throw new Error(`the skill store needs node:sqlite (Node 22.13 or later); this is Node ${process.versions.node}`);
-  }
-  return mod as typeof import("node:sqlite");
 }
 
 const SCHEMA_VERSION = 1;

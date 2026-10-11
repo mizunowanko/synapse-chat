@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.4.0
+
+### Minor Changes
+
+- 指示書を SQLite（スキルと同じファイル）に 2 階層（全員・エージェント）で置き、起動時に Claude Code / Codex / agy へ常に文脈に入る形で渡す `@synapse-chat/mcp/instructions` と、管理用 CLI `synapse-instructions` を追加した（agents-familia-43）。置き換える指示ファイルは Claude では `claudeMdExcludes`、Codex では `project_doc_max_bytes=0` で読ませない。agy は止められないので `stillLoaded` で知らせる。
+
 ## 0.3.0
 
 ## 0.2.0
