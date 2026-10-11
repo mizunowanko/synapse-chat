@@ -92,6 +92,25 @@ import { claudeSkillsMcpConfig, codexSkillsConfigArgs, agySkillsPluginFiles, SKI
 
 Design, write rules and the per-CLI registration: [`docs/design/skills-mcp.md`](../../docs/design/skills-mcp.md).
 
+## Instructions (`@synapse-chat/mcp/instructions`, `synapse-instructions`)
+
+Agents' standing instructions (what used to be `CLAUDE.md` / `AGENTS.md`) kept in the same SQLite file as the skills, in two tiers: everyone and agent (the agent's text is appended after everyone's). They are always in context: each CLI gets the full text at launch, not a tool to fetch it with.
+
+```bash
+synapse-instructions import ./agents/CLAUDE.md --global --db /abs/skills.db
+synapse-instructions import ./agents/Tsukuyo/CLAUDE.md --agent Tsukuyo --db /abs/skills.db
+synapse-instructions show --agent Tsukuyo --effective --db /abs/skills.db
+synapse-instructions launch claude --cwd /abs/agents/Tsukuyo --agent Tsukuyo --replace /abs/agents/Tsukuyo --db /abs/skills.db
+```
+
+```ts
+import { InstructionStore, effectiveInstructions, instructionsLaunch } from "@synapse-chat/mcp/instructions";
+const { text } = effectiveInstructions(InstructionStore.open(db), "Tsukuyo");
+const launch = instructionsLaunch("claude", { text, cwd, replaces: [cwd] }); // systemPromptAppend / args / files / stillLoaded
+```
+
+Per-CLI delivery and how the replaced files are kept out: [`docs/design/instructions.md`](../../docs/design/instructions.md).
+
 ## Design notes
 
 - **Input schemas are JSON Schema.** No Zod / TypeBox lock-in. The MCP SDK accepts JSON Schema verbatim, and this keeps the door open for OpenAPI → MCP generation.
