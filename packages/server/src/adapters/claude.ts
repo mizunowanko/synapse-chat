@@ -34,6 +34,9 @@ export function buildClaudeArgs(options: SessionOptions): string[] {
     "--verbose",
   ];
 
+  if (options.model) {
+    args.push("--model", options.model);
+  }
   if (options.effort) {
     args.push("--effort", options.effort);
   }

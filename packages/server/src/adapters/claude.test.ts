@@ -65,6 +65,18 @@ describe("buildClaudeArgs", () => {
     expect(args[idx + 1]).toBe("You are helpful.");
   });
 
+  it("maps model to --model", () => {
+    const args = buildClaudeArgs({ prompt: "hi", model: "opus" });
+    const idx = args.indexOf("--model");
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(args[idx + 1]).toBe("opus");
+    expect(args.filter((a) => a === "--model")).toHaveLength(1);
+  });
+
+  it("omits --model when model is unset", () => {
+    expect(buildClaudeArgs({ prompt: "hi" })).not.toContain("--model");
+  });
+
   it("maps effort to --effort", () => {
     const args = buildClaudeArgs({ effort: "high" });
     const idx = args.indexOf("--effort");

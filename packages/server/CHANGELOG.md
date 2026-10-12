@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-server
 
+## 0.5.1
+
+### Patch Changes
+
+- Claude の adapter が `SessionOptions.model` を `--model <id>` で渡すようにする。これまでは doc に書いてあるのに捨てていた（syn-2）
+
 ## 0.5.0
 
 ### Minor Changes
