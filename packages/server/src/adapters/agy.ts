@@ -96,6 +96,12 @@ export function buildAgyArgs(options: SessionOptions): string[] {
   if (options.model) {
     args.push("--model", options.model);
   }
+  // agy resolves `--model <family> --effort <level>` to the matching variant
+  // (`gemini-3.8-flash` + `high` → `gemini-3.8-flash-high`) and rejects a
+  // conflicting pair (`gemini-3.8-flash-low` + `high`) itself.
+  if (options.effort) {
+    args.push("--effort", options.effort);
+  }
   // Required — without a workspace agy cannot read any file. See class docs.
   if (options.cwd) {
     args.push("--add-dir", options.cwd);

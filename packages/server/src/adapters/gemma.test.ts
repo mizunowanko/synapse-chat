@@ -54,6 +54,7 @@ describe("buildGemmaArgs", () => {
       resumeSessionId: "sess-1",
       allowedTools: ["Read"],
       systemPrompt: "sys",
+      effort: "high",
     });
     expect(args).toEqual(["-p", "hi"]);
   });

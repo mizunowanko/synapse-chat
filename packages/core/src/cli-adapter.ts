@@ -26,6 +26,23 @@ export interface SessionOptions {
    */
   model?: string;
   /**
+   * Reasoning effort for the turn, passed through to the CLI as-is:
+   * - Claude: `--effort <level>`
+   * - Codex: `-c model_reasoning_effort=<level>`
+   * - agy: `--effort <level>` (agy picks the matching model variant, e.g.
+   *   `--model gemini-3.8-flash --effort high` runs `gemini-3.8-flash-high`)
+   * - gemini / gemma / Ollama: ignored
+   *
+   * A free string rather than a shared enum: each CLI validates the value
+   * itself and the accepted sets differ and change between versions. The
+   * levels common to Claude, Codex and agy are `low`, `medium`, `high`,
+   * `xhigh` and `max`; Codex additionally takes `none` and `minimal`.
+   *
+   * Adapters omit the flag entirely when this is unset, letting the CLI apply
+   * its own default.
+   */
+  effort?: string;
+  /**
    * Auto-approve all tool/permission prompts. Translates to CLI-specific flags:
    * - Claude: `--dangerously-skip-permissions`
    * - Gemini: `--yolo`
