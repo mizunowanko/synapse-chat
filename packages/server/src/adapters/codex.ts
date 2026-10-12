@@ -81,6 +81,9 @@ export function buildCodexArgs(options: SessionOptions): string[] {
   if (options.model) {
     args.push("-m", options.model);
   }
+  if (options.effort) {
+    args.push("-c", `model_reasoning_effort=${options.effort}`);
+  }
   if (options.cwd) {
     args.push("-C", options.cwd);
   }

@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-server
 
+## 0.5.0
+
+### Minor Changes
+
+- `SessionOptions.effort`（推論のエフォート）を足す。Claude は `--effort <level>`、Codex は `-c model_reasoning_effort=<level>`、agy は `--effort <level>` に渡し、gemini / gemma は無視する。未指定なら何も足さない（syn-1）
+
 ## 0.4.0
 
 ## 0.3.0

@@ -58,6 +58,18 @@ describe("buildAgyArgs", () => {
     expect(args[idx + 1]).toBe("gemini-3.8-flash-low");
   });
 
+  it("passes effort through --effort (agy picks the model variant)", () => {
+    const args = buildAgyArgs({ prompt: "hi", model: "gemini-3.8-flash", effort: "high" });
+    const idx = args.indexOf("--effort");
+    expect(args[idx + 1]).toBe("high");
+    expect(args[args.indexOf("--model") + 1]).toBe("gemini-3.8-flash");
+  });
+
+  it("omits --effort when effort is unset", () => {
+    expect(buildAgyArgs({ prompt: "hi" })).not.toContain("--effort");
+    expect(buildAgyArgs({})).not.toContain("--effort");
+  });
+
   it("maps autoApprove to --dangerously-skip-permissions", () => {
     expect(buildAgyArgs({ prompt: "hi", autoApprove: true })).toContain(
       "--dangerously-skip-permissions",

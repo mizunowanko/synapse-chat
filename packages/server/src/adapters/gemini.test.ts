@@ -10,6 +10,9 @@ describe("buildGeminiArgs", () => {
   it("adds --prompt when prompt is set", () => {
     expect(buildGeminiArgs({ prompt: "hello" })).toEqual(["--prompt", "hello"]);
   });
+  it("ignores effort (the gemini CLI has no effort flag)", () => {
+    expect(buildGeminiArgs({ prompt: "hello", effort: "high" })).toEqual(["--prompt", "hello"]);
+  });
 
   it("returns empty args when no prompt", () => {
     expect(buildGeminiArgs({})).toEqual([]);

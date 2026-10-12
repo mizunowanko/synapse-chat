@@ -36,6 +36,8 @@ Every adapter answers four questions about the underlying CLI:
 3. **How do I write to its stdin?** (`formatInput`, optional)
 4. **What stderr tells me to retry / back off?** (`rateLimitPatterns`, `retryableErrorPatterns`)
 
+`SessionOptions.effort` (reasoning effort) is a free string passed through as-is — Claude `--effort <level>`, Codex `-c model_reasoning_effort=<level>`, agy `--effort <level>` — and a CLI with no effort knob (gemini, gemma) simply drops it; omit the flag when it is unset.
+
 The framework deliberately stops there. Nothing about session lifecycle, prompts, or app semantics belongs in an adapter.
 
 ## Walkthrough: `claudeAdapter`

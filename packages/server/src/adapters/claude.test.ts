@@ -65,6 +65,17 @@ describe("buildClaudeArgs", () => {
     expect(args[idx + 1]).toBe("You are helpful.");
   });
 
+  it("maps effort to --effort", () => {
+    const args = buildClaudeArgs({ effort: "high" });
+    const idx = args.indexOf("--effort");
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(args[idx + 1]).toBe("high");
+  });
+
+  it("omits --effort when effort is unset", () => {
+    expect(buildClaudeArgs({ prompt: "hi" })).not.toContain("--effort");
+  });
+
   it("appends --dangerously-skip-permissions when autoApprove is true", () => {
     const args = buildClaudeArgs({ autoApprove: true });
     expect(args).toContain("--dangerously-skip-permissions");

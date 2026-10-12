@@ -44,6 +44,19 @@ describe("buildCodexArgs", () => {
     expect(args[idx + 1]).toBe("gpt-5.6-luna");
   });
 
+  it("maps effort to -c model_reasoning_effort", () => {
+    const args = buildCodexArgs({ prompt: "hi", effort: "xhigh" });
+    const idx = args.indexOf("-c");
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(args[idx + 1]).toBe("model_reasoning_effort=xhigh");
+  });
+
+  it("omits the effort override when effort is unset", () => {
+    const args = buildCodexArgs({ prompt: "hi" });
+    expect(args).not.toContain("-c");
+    expect(args.some((a) => a.startsWith("model_reasoning_effort="))).toBe(false);
+  });
+
   it("maps autoApprove to the sandbox bypass flag", () => {
     expect(buildCodexArgs({ prompt: "hi", autoApprove: true })).toContain(
       "--dangerously-bypass-approvals-and-sandbox",
@@ -65,13 +78,14 @@ describe("buildCodexArgs", () => {
       prompt: "again",
       cwd: "/work/repo",
       model: "gpt-5.6-luna",
+      effort: "low",
       resumeSessionId: "thread-1",
     });
     const resumeIdx = args.indexOf("resume");
     expect(resumeIdx).toBeGreaterThanOrEqual(0);
     expect(args[resumeIdx + 1]).toBe("thread-1");
     expect(args[resumeIdx + 2]).toBe("again");
-    for (const flag of ["--json", "--skip-git-repo-check", "-C", "-m"]) {
+    for (const flag of ["--json", "--skip-git-repo-check", "-C", "-m", "-c"]) {
       expect(args.indexOf(flag)).toBeLessThan(resumeIdx);
     }
   });
