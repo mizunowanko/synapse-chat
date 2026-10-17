@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.6.0
+
+### Minor Changes
+
+- エージェントが使う MCP サーバーの台帳を、スキル・指示書と同じ SQLite に 3 階層（全員・エージェント・Desk）で持ち、起動時に Claude Code / Codex / agy それぞれの形で渡す `@synapse-chat/mcp/mcp-servers` と、管理用 CLI `synapse-mcp-servers`（list / show / put / rm / history / launch）を追加した（syn-3）。1 件は名前・transport（stdio: command・args・env・cwd／http: url・headers）・有効かどうか。秘密は `${NAME}` で環境変数を参照し、起動時に展開する（無ければそのサーバーを渡さず `skipped` に出す）。Claude は `mcpServers`（呼ぶ側が自分の server と 1 つの `--mcp-config` にまとめる。stdio の `cwd` は `/bin/sh` を挟んで効かせる）、Codex は `-c mcp_servers.<name>.…`（TOML を正しく escape）、agy は workspace plugin。`synapse-instructions launch` の出力にも `mcp` として入り、`--desk` を受け付ける。
+
 ## 0.5.1
 
 ## 0.5.0
