@@ -11,7 +11,7 @@
 | 起動時の渡し方 | `launch.ts` | `instructionsLaunch()` / `withdrawInstructionsFiles()`。値を返すだけで、ファイルは書かない |
 | 管理用 CLI | `cli.ts` | `synapse-instructions list / show / import / export / rm / history / launch` |
 
-スキル（[skills-mcp.md](skills-mcp.md)）と違い、**MCP サーバーは無い。** 指示書は「必要なときに取りに行くもの」ではなく「最初から全部読んでいるもの」なので、起動の引数・system prompt・起動前に置くファイルで渡す。
+スキル（[skills-mcp.md](skills-mcp.md)）と違い、**MCP サーバーは無い。** 同じファイルに、エージェントが使う MCP サーバーの台帳も入る（[mcp-servers.md](mcp-servers.md)）。 指示書は「必要なときに取りに行くもの」ではなく「最初から全部読んでいるもの」なので、起動の引数・system prompt・起動前に置くファイルで渡す。
 
 ## 階層
 
@@ -98,12 +98,12 @@ synapse-instructions import  <file> (--global | --agent A) [--dry-run]
 synapse-instructions export  (--global | --agent A) --out <file> [--force]
 synapse-instructions rm      (--global | --agent A)
 synapse-instructions history (--global | --agent A)
-synapse-instructions launch  <claude|codex|agy> --cwd <dir> [--agent A] [--replace <dir>]...
+synapse-instructions launch  <claude|codex|agy> --cwd <dir> [--agent A [--desk D]] [--replace <dir>]...
 ```
 
 - `import` はファイルから Briefing の指紋の行（`<!-- briefing:v1 fingerprint=… -->`）を外して入れる。`--dry-run` は DB を開かない（作らない）
 - `show --agent A --effective` はそのエージェントのセッションに入る本文（全員＋エージェント＋スキルの案内）
-- `launch` は `instructionsLaunch()` の結果を JSON で出す。起動に何が載るかを確かめる用
+- `launch` は `instructionsLaunch()` の結果を JSON で出す。起動に何が載るかを確かめる用。MCP サーバーの台帳（[mcp-servers.md](mcp-servers.md)）の分も `mcp` に入る（`--desk` はこのため。指示書に Desk の階層は無い）
 
 ## 確かめ方
 

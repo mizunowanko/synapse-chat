@@ -101,6 +101,7 @@ synapse-instructions import ./agents/CLAUDE.md --global --db /abs/skills.db
 synapse-instructions import ./agents/Tsukuyo/CLAUDE.md --agent Tsukuyo --db /abs/skills.db
 synapse-instructions show --agent Tsukuyo --effective --db /abs/skills.db
 synapse-instructions launch claude --cwd /abs/agents/Tsukuyo --agent Tsukuyo --replace /abs/agents/Tsukuyo --db /abs/skills.db
+# the output also carries the MCP server ledger under `mcp` (below); add --desk D for desk-tier servers
 ```
 
 ```ts
@@ -110,6 +111,33 @@ const launch = instructionsLaunch("claude", { text, cwd, replaces: [cwd] }); // 
 ```
 
 Per-CLI delivery and how the replaced files are kept out: [`docs/design/instructions.md`](../../docs/design/instructions.md).
+
+## MCP server ledger (`@synapse-chat/mcp/mcp-servers`, `synapse-mcp-servers`)
+
+The MCP servers an agent's sessions get, kept provider-neutral in the same SQLite file, in the skills' tiers (everyone → agent → desk; the lower tier wins a name, `enabled: false` switches a server off for that tier). Every write is a new version; removing leaves a tombstone. Secrets stay out of the DB: any value may say `${NAME}`, expanded at launch from the environment you pass (a missing variable skips that server and says which variable).
+
+```bash
+cat > artiflow.json <<'JSON'
+{"name": "artiflow", "transport": "stdio", "command": "node", "args": ["/srv/artiflow/mcp.js"],
+ "env": {"ARTIFLOW_TOKEN": "${ARTIFLOW_TOKEN}"}, "cwd": "/srv/artiflow"}
+JSON
+synapse-mcp-servers put artiflow.json --agent Homura --db /abs/skills.db
+synapse-mcp-servers list --effective --agent Homura --desk artiflow --db /abs/skills.db
+synapse-mcp-servers launch codex --agent Homura --db /abs/skills.db   # what Codex would get (secrets expanded)
+synapse-mcp-servers history artiflow --db /abs/skills.db
+```
+
+```ts
+import { McpServerStore, mcpServersLaunch, claudeMcpConfigArgs } from "@synapse-chat/mcp/mcp-servers";
+const ledger = McpServerStore.open(db).effective(deskScope("Homura", "artiflow"));
+const mcp = mcpServersLaunch(cli, ledger, { env: process.env, reserved: ["skills", ...yourOwnNames] });
+// claude: claudeMcpConfigArgs(yourServers, mcp.mcpServers) → one --mcp-config
+// codex:  [...yourArgs, ...mcp.args]          (-c mcp_servers.<name>.…)
+// agy:    write mcp.files under the cwd       (.agents/plugins/synapse-mcp-servers/)
+// mcp.skipped / mcp.disabled: what was not handed out, and why
+```
+
+Per-CLI delivery (Claude ignores a stdio `cwd`, so it is started through `/bin/sh`; Codex's TOML quoting; agy's plugin and its withdrawal) and how to merge with your own servers: [`docs/design/mcp-servers.md`](../../docs/design/mcp-servers.md).
 
 ## Design notes
 

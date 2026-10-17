@@ -78,7 +78,7 @@ node …/dist/skills/cli.js serve --db /abs/skills.db --agent Tsukuyo [--desk ar
 | DB | `~/.local/share/synapse-skills/skills.db`（`$XDG_DATA_HOME` があればその下） | `--db`、`$SYNAPSE_SKILLS_DB` |
 | 書き出し | `~/.cache/synapse-skills/` | `--cache-dir` |
 
-同じファイルに、エージェントの指示書（`instruction_versions` テーブル）も入る（[instructions.md](instructions.md)）。
+同じファイルに、エージェントの指示書（`instruction_versions` テーブル、[instructions.md](instructions.md)）と MCP サーバーの台帳（`mcp_server_versions` テーブル、[mcp-servers.md](mcp-servers.md)）も入る。
 
 DB は消すと戻らないデータなので data の場所、書き出しは何度でも作り直せるので cache の場所。どちらも repo の外なので commit されない。**アプリは DB を必ず絶対パスで渡す**（登録の関数は相対パスを拒否する）。CLI ごとにサーバーの cwd が違う（agy は plugin のディレクトリ）ので、相対パスは当てにならない。
 
