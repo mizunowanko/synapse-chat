@@ -61,7 +61,7 @@ Each layer is independently consumable:
 | [`@synapse-chat/core`](./packages/core) | Shared types (`StreamMessage`, `ImageAttachment`, `CLIAdapter`, `SessionOptions`, `ProcessManagerLike`). Dependency-free; safe to import from any environment. |
 | [`@synapse-chat/server`](./packages/server) | Node.js `ProcessManager`, `stream-json` parser, generic `Supervisor`, and Claude / Gemini adapters. |
 | [`@synapse-chat/react`](./packages/react) | React 18/19 chat primitives (`ChatMessage`, `ToolUseGroup`, `SessionInput`), `useChat` / `useWebSocket` hooks, and a generic `WSClient`. |
-| [`@synapse-chat/mcp`](./packages/mcp) | MCP (Model Context Protocol) helpers: declarative HTTP-to-MCP tool proxies, stdio server scaffold, Claude Code / Gemini CLI settings generators, and SQLite-backed skills, instructions and an MCP server ledger handed to Claude Code / Codex / agy at launch ([docs/design/](./docs/design/mcp-servers.md)). Optional — pull in only when exposing a Backend to CLI agents. |
+| [`@synapse-chat/mcp`](./packages/mcp) | MCP (Model Context Protocol) helpers: declarative HTTP-to-MCP tool proxies, stdio server scaffold, Claude Code / Gemini CLI settings generators, SQLite-backed skills, instructions and an MCP server ledger handed to Claude Code / Codex / agy at launch ([docs/design/](./docs/design/mcp-servers.md)), and a peers server for messages between sessions ([peers-mcp.md](./docs/design/peers-mcp.md)). Optional — pull in only when exposing a Backend to CLI agents. |
 
 Dependency graph:
 

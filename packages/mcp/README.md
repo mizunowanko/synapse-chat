@@ -139,6 +139,26 @@ const mcp = mcpServersLaunch(cli, ledger, { env: process.env, reserved: ["skills
 
 Per-CLI delivery (Claude ignores a stdio `cwd`, so it is started through `/bin/sh`; Codex's TOML quoting; agy's plugin and its withdrawal) and how to merge with your own servers: [`docs/design/mcp-servers.md`](../../docs/design/mcp-servers.md).
 
+## Peers (`@synapse-chat/mcp/peers`, `synapse-peers`)
+
+A stdio MCP server, one per CLI session, that lets the session message the app's other sessions: `list_peers` and `send_message`, relayed to two HTTP endpoints the app implements (`GET /api/peers`, `POST /api/peers/messages`; the types are in `contract.ts`). The app owns addresses, delivery, limits and the sender's identity, which it reads from the bearer token in the server's launch arguments (never an environment variable). The server passes the app's refusals (`reason` and all) to the model and makes up only `server-unreachable`. No `node:sqlite`, so Node 20 is enough.
+
+```ts
+import { claudeMcpConfigArgs } from "@synapse-chat/mcp/mcp-servers";
+import { claudePeersMcpServers, codexPeersConfigArgs, agyPeersPluginFiles, withdrawPeersFiles } from "@synapse-chat/mcp/peers";
+const peers = { api: "http://127.0.0.1:8001", token }; // one token per session
+// claude: claudeMcpConfigArgs(claudePeersMcpServers(peers), yourServers) → one --mcp-config
+// codex:  [...codexPeersConfigArgs(peers), ...yourArgs]
+// agy:    write agyPeersPluginFiles(peers) under the cwd (.agents/plugins/synapse-peers/, 0600: it holds the token)
+//         withdrawPeersFiles("agy") over an existing plugin to take it back
+```
+
+```bash
+synapse-peers register claude --api http://127.0.0.1:8123 --token t --log /abs/peers.jsonl   # what Claude would get
+```
+
+The contract, the annotations, per-CLI measurements and traps (agy needs `--dangerously-skip-permissions`; two agy launches in one cwd can swap tokens): [`docs/design/peers-mcp.md`](../../docs/design/peers-mcp.md).
+
 ## Design notes
 
 - **Input schemas are JSON Schema.** No Zod / TypeBox lock-in. The MCP SDK accepts JSON Schema verbatim, and this keeps the door open for OpenAPI → MCP generation.

@@ -38,7 +38,7 @@
 
 | キー | | |
 |---|---|---|
-| `name` | 必須 | 英数字で始まり、英数字・`-`・`_` だけ（`__` は不可）、64 文字まで。Claude のツール名 `mcp__<name>__<tool>` と Codex の TOML のキーにそのまま入るため。**`skills` は使えない**（スキルの server の名前） |
+| `name` | 必須 | 英数字で始まり、英数字・`-`・`_` だけ（`__` は不可）、64 文字まで。Claude のツール名 `mcp__<name>__<tool>` と Codex の TOML のキーにそのまま入るため。**`skills` と `peers` は使えない**（このパッケージが自分で渡す server の名前。[skills-mcp.md](skills-mcp.md)、[peers-mcp.md](peers-mcp.md)） |
 | `enabled` | 既定 `true` | `false` の版は起動時に渡さない（下の「階層」） |
 | `transport` | 必須 | `stdio` か `http`（Streamable HTTP）。旧い HTTP+SSE は扱わない |
 | `command` / `args` / `env` / `cwd` | stdio | `cwd` は絶対パス。`env` のキーは環境変数の名前の形 |
@@ -116,10 +116,10 @@ stdio では `args` を空でも必ず送る。Codex は `-c` の値を `~/.code
 
 アプリは、スキルの server や自分で持つ HTTP のサーバー（familia の MCP Apps など）を、台帳のサーバーと合わせて渡す。
 
-- **名前の衝突は呼ぶ側の勝ち。** 自分で渡す名前を `reserved` に入れると、台帳の同じ名前は `skipped` に入って渡らない。`skills` は常に予約
+- **名前の衝突は呼ぶ側の勝ち。** 自分で渡す名前を `reserved` に入れると、台帳の同じ名前は `skipped` に入って渡らない。`skills` と `peers` は常に予約
 - **Claude**: `claudeMcpConfigArgs(自分のもの, launch.mcpServers)` で 1 つの `--mcp-config` にする（先に渡した map が同じ名前で勝つ）。`--strict-mcp-config` は付けない（ユーザーの server を消すため）
 - **Codex**: `[...自分の -c, ...launch.args]`
-- **agy**: `{ ...自分の plugin のファイル, ...launch.files }`。plugin のディレクトリが違う（`synapse-skills` / `synapse-instructions` / `synapse-mcp-servers`）ので重ならない
+- **agy**: `{ ...自分の plugin のファイル, ...launch.files }`。plugin のディレクトリが違う（`synapse-skills` / `synapse-instructions` / `synapse-mcp-servers` / `synapse-peers`）ので重ならない
 
 ```ts
 import { McpServerStore, mcpServersLaunch, claudeMcpConfigArgs } from "@synapse-chat/mcp/mcp-servers";
