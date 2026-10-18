@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.7.0
+
+### Minor Changes
+
+- CLI のセッションから同じアプリのほかのセッションにメッセージを送る stdio の MCP サーバー `@synapse-chat/mcp/peers`（bin `synapse-peers`）を追加した（syn-4）。ツールは `list_peers` / `send_message` で、中身はアプリが実装する 2 つの HTTP の受け口（`GET /api/peers`・`POST /api/peers/messages`、型は `contract.ts`）への薄い中継。送り手はサーバーの起動引数のトークン（`Authorization: Bearer`）でアプリが決める（環境変数では受けない）。アプリの断り（`reason` と添えたもの）はそのままモデルに渡し、自分で作るのは `server-unreachable`（繋がらない・形が違う・時間切れ）だけ。Claude Code（`claudePeersMcpServers`）/ Codex（`codexPeersConfigArgs`）/ agy（専用の plugin `synapse-peers`、`agyPeersPluginFiles`・`withdrawPeersFiles`）への登録の形を返す。MCP サーバーの台帳では `peers` を予約にした。
+
 ## 0.6.0
 
 ### Minor Changes

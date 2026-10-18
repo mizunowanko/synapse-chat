@@ -15,6 +15,8 @@ packages/
   server/   @synapse-chat/server  — Node.js プロセスマネージャ + ストリームパーサ + supervisor
   mcp/      @synapse-chat/mcp     — MCP ヘルパー + スキルを SQLite から配る MCP サーバー（`./skills`、bin `synapse-skills`。docs/design/skills-mcp.md）
                                     + 指示書を同じ SQLite から起動時に配る（`./instructions`、bin `synapse-instructions`。docs/design/instructions.md）
+                                    + MCP サーバーの台帳（`./mcp-servers`、bin `synapse-mcp-servers`。docs/design/mcp-servers.md）
+                                    + セッション間のメッセージを中継する MCP サーバー（`./peers`、bin `synapse-peers`。docs/design/peers-mcp.md）
 apps/
   example/  @synapse-chat/example — Vite + React + ws の動作サンプル（非公開）
 docs/       プロトコル仕様・Adapter ガイド・design doc（docs/design/）

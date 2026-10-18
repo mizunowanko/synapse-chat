@@ -15,6 +15,7 @@ describe("names", () => {
       expect(() => assertMcpServerName(bad)).toThrow(/invalid MCP server name/);
     }
     expect(() => assertMcpServerName("skills")).toThrow(/reserved/);
+    expect(() => assertMcpServerName("peers")).toThrow(/reserved/);
   });
 });
 

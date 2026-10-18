@@ -40,7 +40,7 @@ export interface McpServersLaunchOptions {
   /**
    * Names the caller hands out itself (its skills server, its own HTTP
    * servers). A ledger server under one of these is skipped and reported, so
-   * the caller's entry is the one the CLI gets. `skills` is always reserved.
+   * the caller's entry is the one the CLI gets. `skills` and `peers` are always reserved.
    */
   readonly reserved?: readonly string[];
 }

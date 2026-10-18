@@ -42,8 +42,12 @@ export type McpServerSpec = McpServerConfig & {
 const NAME_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]|_(?!_))*$/;
 const MAX_NAME = 64;
 
-/** The skills server's name (`skills/server.ts`). The ledger never hands out a server under it. */
-export const RESERVED_MCP_SERVER_NAMES: readonly string[] = ["skills"];
+/**
+ * The names of the servers this package hands out itself: the skills server
+ * (`skills/server.ts`) and the peers server (`peers/server.ts`). The ledger
+ * never hands out a server under them.
+ */
+export const RESERVED_MCP_SERVER_NAMES: readonly string[] = ["skills", "peers"];
 
 export function isMcpServerName(name: unknown): name is string {
   return typeof name === "string" && name.length > 0 && name.length <= MAX_NAME && NAME_RE.test(name);
@@ -56,7 +60,7 @@ export function assertMcpServerName(name: unknown): asserts name is string {
     );
   }
   if (RESERVED_MCP_SERVER_NAMES.includes(name)) {
-    throw new Error(`MCP server name ${name} is reserved (the skills server)`);
+    throw new Error(`MCP server name ${name} is reserved (a server this package hands out itself: skills, peers)`);
   }
 }
 
