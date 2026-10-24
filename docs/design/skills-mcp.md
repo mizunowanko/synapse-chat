@@ -24,7 +24,19 @@
 |---|---|---|
 | 全員 | `("", "")` | 全員 |
 | エージェント | `("Tsukuyo", "")` | そのエージェントの全セッション |
-| Desk | `("Tsukuyo", "artiflow")` | その Desk のセッションだけ |
+| Desk | `("Tsukuyo", "<Desk の id>")` | その Desk のセッションだけ |
+
+### Desk の階層の鍵は Desk の id（agt-215）
+
+`desk` の値は store にとってはただの文字列だが、アプリは**改名しても変わらない Desk の id** を渡す（`--desk-id`、`SkillsLaunchOptions.deskId`、`deskViewer()`）。名前を鍵にすると、Desk を改名したときに Desk の階層が切れ、のちに同じ名前を付けた別の Desk に見えてしまう。
+
+以前のアプリは Desk の**名前**を鍵にしていたので、その行が残っている store がある。移し替え（行の `desk` を名前から id に書き換えるのはアプリの仕事）が済むまでのために、閲覧者は**旧い鍵（`legacyDesk` = Desk の名前）を読むだけ**持てる。
+
+- 見る順は **Desk の id → 旧い鍵（名前）→ エージェント → 全員**。id の行が名前の行に勝つ
+- 書き込み（`put_skill` の `scope: "desk"`、CLI の `--desk-id` での `import` / `rm`）は **id にだけ**書く。省いた説明・frontmatter・付属ファイルは、旧い鍵の行からも引き継ぐ
+- `list_skills` は、自分の Desk の階層（id でも旧い鍵でも）を「この Desk」と出す（id を見せない）
+- 起動引数は `--desk-id <id> --desk <名前>`。`--desk` だけなら、いままでどおりその値が鍵（旧いアプリのため。当面残す）
+- 移し替えが済んだら、アプリは `--desk`（旧い鍵）を渡すのをやめてよい
 
 上書きは自分にしか効かない。エージェント A が全員の `issue-draft` を上書きしても、B には全員の版が見えたまま。**上書きを消すと、全員の版がまた見える**（削除の印は、上の階層を隠さない）。
 
@@ -54,7 +66,7 @@
 | 管理用 CLI（`synapse-skills import` / `rm`） | どこでも。ただし **`--global` か `--agent <名前>` を必ず書く**（省略で全員に書かない） |
 
 - **全員の階層は MCP からは書けない。** 全員が使うスクリプトを 1 人のエージェントが壊せないように。直すときは人（か、それを頼まれたエージェント）が CLI で `--global` を付けて書く
-- **`put_skill` には書き込み先を指す引数が無い。** 階層は起動引数の `--agent` / `--desk` からしか決まらないので、ほかのエージェントや全員の階層を名指しする手段がそもそも無い。規則は `scope.ts` の `mcpWriteRefusal()` 1 か所にある
+- **`put_skill` には書き込み先を指す引数が無い。** 階層は起動引数の `--agent` / `--desk-id`（/ `--desk`）からしか決まらないので、ほかのエージェントや全員の階層を名指しする手段がそもそも無い。規則は `scope.ts` の `mcpWriteRefusal()` 1 か所にある
 - `--agent` の無いセッションと `--read-only` のセッションには `put_skill` を**出さない**
 - これは事故を防ぐための線で、悪意への防御ではない。シェルが使えるエージェントは CLI も DB ファイルも触れる
 - **非対話の Codex（`codex exec`）も `put_skill` を呼べる。** `put_skill` に `destructiveHint: false` / `openWorldHint: false` を付けてあるので承認を求められない（annotations を外すと `requires approval, but approval policy is never` で落ちる。Codex 0.153 で実測）。書けるのは自分の階層だけで、前の版も残るので、承認なしで通してよいことにした
@@ -64,7 +76,7 @@
 サーバーは**起動引数**で自分が誰に仕えるかを知る。
 
 ```
-node …/dist/skills/cli.js serve --db /abs/skills.db --agent Tsukuyo [--desk artiflow] [--read-only] [--cache-dir …] [--log …]
+node …/dist/skills/cli.js serve --db /abs/skills.db --agent Tsukuyo [--desk-id <Desk の id> [--desk <Desk の名前>]] [--read-only] [--cache-dir …] [--log …]
 ```
 
 **環境変数では受けない。** 環境変数は子プロセスに黙って引き継がれる（アプリのサーバー → CLI → その CLI が起動した別の CLI → その MCP サーバー）ので、別のエージェントとして動く事故が起きる。起動引数なら、そのセッションの登録 1 か所にしか書かれない。

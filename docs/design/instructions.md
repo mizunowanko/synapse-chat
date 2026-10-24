@@ -98,12 +98,12 @@ synapse-instructions import  <file> (--global | --agent A) [--dry-run]
 synapse-instructions export  (--global | --agent A) --out <file> [--force]
 synapse-instructions rm      (--global | --agent A)
 synapse-instructions history (--global | --agent A)
-synapse-instructions launch  <claude|codex|agy> --cwd <dir> [--agent A [--desk D]] [--replace <dir>]...
+synapse-instructions launch  <claude|codex|agy> --cwd <dir> [--agent A [--desk-id I] [--desk D]] [--replace <dir>]...
 ```
 
 - `import` はファイルから Briefing の指紋の行（`<!-- briefing:v1 fingerprint=… -->`）を外して入れる。`--dry-run` は DB を開かない（作らない）
 - `show --agent A --effective` はそのエージェントのセッションに入る本文（全員＋エージェント＋スキルの案内）
-- `launch` は `instructionsLaunch()` の結果を JSON で出す。起動に何が載るかを確かめる用。MCP サーバーの台帳（[mcp-servers.md](mcp-servers.md)）の分も `mcp` に入る（`--desk` はこのため。指示書に Desk の階層は無い）
+- `launch` は `instructionsLaunch()` の結果を JSON で出す。起動に何が載るかを確かめる用。MCP サーバーの台帳（[mcp-servers.md](mcp-servers.md)）の分も `mcp` に入る（`--desk-id` / `--desk` はこのため。指示書に Desk の階層は無い）
 
 ## 確かめ方
 

@@ -17,8 +17,10 @@ import {
   agentScope,
   deskScope,
   describeScope,
+  isOwnDeskScope,
   mcpWriteRefusal,
   type SkillScope,
+  type SkillViewer,
 } from "./scope.js";
 import type { SkillFile, SkillRecord, SkillStore } from "./store.js";
 
@@ -27,8 +29,11 @@ export const SKILLS_SERVER_VERSION = "1";
 
 export interface SkillsServerOptions {
   readonly store: SkillStore;
-  /** Who this session is. `{ agent: "", desk: "" }` sees only the everyone tier and cannot write. */
-  readonly viewer: SkillScope;
+  /**
+   * Who this session is. `{ agent: "", desk: "" }` sees only the everyone tier and cannot write.
+   * `desk` is the desk's key (its id); `legacyDesk` the name its older rows are keyed on (read only).
+   */
+  readonly viewer: SkillViewer;
   /** Where `get_skill` writes attached files. */
   readonly cacheRoot: string;
   /** `false` hides `put_skill`. Default `true` (it is still refused without an agent). */
@@ -53,6 +58,11 @@ export function buildSkillsInstructions(skills: readonly Pick<SkillRecord, "name
     "スキルの名前をユーザーが言わなくても、仕事の内容で判断する。";
   if (skills.length === 0) return `${head}\n\nいま使えるスキルは無い。`;
   return [head, "", ...skills.map((s) => `- ${s.name}: ${oneLine(s.description)}`)].join("\n");
+}
+
+/** A record's tier as this session sees it: its own desk is "この Desk", not an id. */
+function describeFor(viewer: SkillViewer, scope: SkillScope): string {
+  return isOwnDeskScope(viewer, scope) ? "この Desk" : describeScope(scope);
 }
 
 function oneLine(s: string): string {
@@ -141,7 +151,7 @@ export function createSkillsToolHandler(options: SkillsServerOptions) {
       if (skills.length === 0) return text("いま使えるスキルは無い。");
       return text(
         skills
-          .map((s) => `- ${s.name} (v${s.version}・${describeScope(s.scope)}): ${oneLine(s.description)}`)
+          .map((s) => `- ${s.name} (v${s.version}・${describeFor(viewer, s.scope)}): ${oneLine(s.description)}`)
           .join("\n"),
       );
     }
@@ -170,7 +180,11 @@ export function createSkillsToolHandler(options: SkillsServerOptions) {
       }
       // The session can only name its own tiers here, so the rule below cannot
       // refuse today — it is still the one place the rule lives (scope.ts).
-      const target = scope === "desk" ? deskScope(viewer.agent, viewer.desk) : agentScope(viewer.agent);
+      // A desk write goes to the desk key; what it carries over is read from the legacy key too.
+      const target: SkillViewer =
+        scope === "desk"
+          ? { ...deskScope(viewer.agent, viewer.desk), ...(viewer.legacyDesk ? { legacyDesk: viewer.legacyDesk } : {}) }
+          : agentScope(viewer.agent);
       const refusal = mcpWriteRefusal(viewer, target);
       if (refusal) return text(refusal, true);
 
@@ -201,7 +215,7 @@ export function createSkillsToolHandler(options: SkillsServerOptions) {
       const { record, changed } = store.put(target, input);
       return text(
         changed
-          ? `${record.name} を v${record.version} として ${describeScope(record.scope)} の階層に書いた。`
+          ? `${record.name} を v${record.version} として ${describeFor(viewer, record.scope)} の階層に書いた。`
           : `${record.name} は v${record.version} と同じ中身なので、新しい版は作らなかった。`,
       );
     }

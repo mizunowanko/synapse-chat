@@ -14,11 +14,18 @@ import fs from "node:fs";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { loadSqlite } from "../sqlite.js";
-import { visibleScopes, type SkillScope } from "../skills/scope.js";
+import { visibleScopes, type SkillScope, type SkillViewer } from "../skills/scope.js";
 import { assertMcpServerName, parseMcpServerConfig, type McpServerConfig } from "./config.js";
 
-/** Same shape as a skill's scope: `agent: ""` is everyone, `desk: ""` is "not a desk". */
+/**
+ * Same shape as a skill's scope: `agent: ""` is everyone, `desk: ""` is "not a
+ * desk". `desk` is the desk tier's key — the desk id (agt-215); older rows hold
+ * the desk's name.
+ */
 export type McpServerScope = SkillScope;
+
+/** Who is looking, with the desk's legacy key (its name) read beneath the id. Same as {@link SkillViewer}. */
+export type McpServerViewer = SkillViewer;
 
 export interface McpServerRecord {
   readonly id: number;
@@ -146,7 +153,7 @@ export class McpServerStore {
   }
 
   /** The server `viewer` gets under `name`: the lowest tier that holds a live version (enabled or not). */
-  resolve(viewer: McpServerScope, name: string): McpServerRecord | undefined {
+  resolve(viewer: McpServerViewer, name: string): McpServerRecord | undefined {
     for (const scope of visibleScopes(viewer)) {
       const latest = this.latestIn(scope, name);
       if (latest && !latest.deleted) return latest;
@@ -188,7 +195,7 @@ export class McpServerStore {
    * for this viewer; a lower tier's tombstone does not hide the upper tier
    * (removing an override brings the shared server back), as with skills.
    */
-  effective(viewer: McpServerScope): EffectiveMcpServers {
+  effective(viewer: McpServerViewer): EffectiveMcpServers {
     const seen = new Map<string, McpServerRecord>();
     for (const scope of visibleScopes(viewer)) {
       for (const rec of this.listIn(scope)) if (!seen.has(rec.name)) seen.set(rec.name, rec);

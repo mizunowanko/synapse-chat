@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { InstructionStore, GLOBAL_INSTRUCTIONS } from "../instructions/store.js";
-import { GLOBAL_SCOPE, agentScope, deskScope } from "../skills/scope.js";
+import { GLOBAL_SCOPE, agentScope, deskScope, deskViewer } from "../skills/scope.js";
 import { SkillStore } from "../skills/store.js";
 import { loadSqlite } from "../sqlite.js";
 import type { McpServerConfig } from "./config.js";
@@ -110,6 +110,20 @@ describe("McpServerStore", () => {
     again.close();
     store = McpServerStore.open(file);
     expect(store.listAll()).toHaveLength(1);
+  });
+
+  it("a desk keyed on its id reads the rows still keyed on its name beneath it (agt-215)", () => {
+    store.put(agentScope("A"), { name: "a", config: http("https://agent") });
+    store.put(deskScope("A", "main"), { name: "a", config: http("https://by-name") });
+    store.put(deskScope("A", "main"), { name: "b", config: http("https://b-by-name"), enabled: false });
+    const before = store.effective(deskViewer("A", "desk-1", "main"));
+    expect(before.enabled.map((r) => [r.name, (r.config as { url: string }).url])).toEqual([["a", "https://by-name"]]);
+    expect(before.disabled.map((r) => r.name)).toEqual(["b"]);
+
+    store.put(deskScope("A", "desk-1"), { name: "a", config: http("https://by-id") });
+    expect(store.resolve(deskViewer("A", "desk-1", "main"), "a")?.config).toEqual(http("https://by-id"));
+    // Another desk that takes the old name later sees the name's rows, not the id's.
+    expect(store.resolve(deskViewer("A", "desk-2"), "a")?.config).toEqual(http("https://agent"));
   });
 
   it("refuses a store from a newer build", () => {

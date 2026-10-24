@@ -99,6 +99,25 @@ describe("synapse-mcp-servers", () => {
     expect(text().trim().split("\n").map((l) => l.split("\t").slice(0, 2).join(" "))).toEqual(["v1 live", "v2 deleted"]);
   });
 
+  it("--desk-id keys the desk tier, and --effective / launch read --desk beneath it (agt-215)", async () => {
+    await run("put", write("old.json", { name: "y", transport: "http", url: "https://by-name" }), "--agent", "Homura", "--desk", "main");
+    await run("put", write("new.json", { name: "z", transport: "http", url: "https://by-id" }), "--agent", "Homura", "--desk-id", "desk-1", "--desk", "main");
+    output = [];
+    await run("list", "--effective", "--agent", "Homura", "--desk-id", "desk-1", "--desk", "main");
+    expect(text().trim().split("\n").map((l) => l.split("\t").slice(0, 3).join(" "))).toEqual([
+      "Desk Homura/main y v1",
+      "Desk Homura/desk-1 z v1",
+    ]);
+    output = [];
+    await run("show", "z", "--agent", "Homura", "--desk-id", "desk-1");
+    expect((JSON.parse(text()) as { url: string }).url).toBe("https://by-id");
+
+    output = [];
+    await instructionsMain(["launch", "claude", "--cwd", dir, "--agent", "Homura", "--desk-id", "desk-1", "--desk", "main", "--db", db], {});
+    expect((JSON.parse(text()) as { mcp: { delivered: string[] } }).mcp.delivered).toEqual(["y", "z"]);
+    await expect(run("list", "--effective", "--desk-id", "desk-1")).rejects.toThrow(/--agent/);
+  });
+
   it("synapse-instructions launch carries the servers under mcp", async () => {
     await run("put", write("a.json", artiflow), "--agent", "Homura");
     output = [];
