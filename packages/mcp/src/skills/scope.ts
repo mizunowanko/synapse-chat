@@ -5,10 +5,27 @@
  * The lower tier wins when two tiers hold the same name.
  */
 
-/** `agent: ""` is the everyone tier; `desk: ""` means "not a desk". */
+/**
+ * `agent: ""` is the everyone tier; `desk: ""` means "not a desk".
+ *
+ * `desk` is the key of the desk tier. The store treats it as an opaque string;
+ * the app should give a key that does not change when the desk is renamed —
+ * its desk id (agt-215). Older callers keyed the tier on the desk's name, and
+ * rows written then still hold the name ({@link SkillViewer.legacyDesk}).
+ */
 export interface SkillScope {
   readonly agent: string;
   readonly desk: string;
+}
+
+/**
+ * Who is looking (or writing), with the desk's old key. `legacyDesk` is the
+ * desk's name, read as a second desk tier just above `desk` so that rows
+ * written before the app switched the key to the desk id stay visible until
+ * they are migrated. It is only read; writes go to `desk`.
+ */
+export interface SkillViewer extends SkillScope {
+  readonly legacyDesk?: string;
 }
 
 export const GLOBAL_SCOPE: SkillScope = { agent: "", desk: "" };
@@ -22,6 +39,18 @@ export function deskScope(agent: string, desk: string): SkillScope {
   assertIdent("agent", agent);
   assertIdent("desk", desk);
   return { agent, desk };
+}
+
+/**
+ * A desk viewer keyed on the desk id, reading the rows still keyed on the
+ * desk's name (`legacyDesk`) beneath it. Omit `legacyDesk` (or pass the id
+ * itself) once those rows are migrated.
+ */
+export function deskViewer(agent: string, deskId: string, legacyDesk?: string): SkillViewer {
+  const scope = deskScope(agent, deskId);
+  if (legacyDesk === undefined || legacyDesk === deskId) return scope;
+  assertIdent("desk", legacyDesk);
+  return { ...scope, legacyDesk };
 }
 
 export type ScopeTier = "global" | "agent" | "desk";
@@ -44,12 +73,25 @@ export function describeScope(scope: SkillScope): string {
 
 /**
  * The tiers a viewer sees, lowest (strongest) first. A viewer with no agent
- * sees only the everyone tier.
+ * sees only the everyone tier. A desk viewer with a `legacyDesk` sees the
+ * rows under that old key between its desk tier and its agent tier.
  */
-export function visibleScopes(viewer: SkillScope): SkillScope[] {
+export function visibleScopes(viewer: SkillViewer): SkillScope[] {
   if (viewer.agent === "") return [GLOBAL_SCOPE];
-  if (viewer.desk === "") return [viewer, GLOBAL_SCOPE];
-  return [viewer, agentScope(viewer.agent), GLOBAL_SCOPE];
+  const agent: SkillScope = { agent: viewer.agent, desk: "" };
+  if (viewer.desk === "") return [agent, GLOBAL_SCOPE];
+  const desk: SkillScope = { agent: viewer.agent, desk: viewer.desk };
+  const legacy =
+    viewer.legacyDesk !== undefined && viewer.legacyDesk !== "" && viewer.legacyDesk !== viewer.desk
+      ? [{ agent: viewer.agent, desk: viewer.legacyDesk }]
+      : [];
+  return [desk, ...legacy, agent, GLOBAL_SCOPE];
+}
+
+/** Whether `scope` is one of the viewer's own desk tiers (its desk key, or its legacy key). */
+export function isOwnDeskScope(viewer: SkillViewer, scope: SkillScope): boolean {
+  if (tierOf(scope) !== "desk" || scope.agent !== viewer.agent) return false;
+  return scope.desk === viewer.desk || (viewer.legacyDesk !== undefined && scope.desk === viewer.legacyDesk);
 }
 
 export function sameScope(a: SkillScope, b: SkillScope): boolean {

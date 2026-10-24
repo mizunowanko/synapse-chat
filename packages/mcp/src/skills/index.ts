@@ -9,12 +9,15 @@ export {
   GLOBAL_SCOPE,
   agentScope,
   deskScope,
+  deskViewer,
   describeScope,
+  isOwnDeskScope,
   tierOf,
   visibleScopes,
   mcpWriteRefusal,
   assertSkillName,
   type SkillScope,
+  type SkillViewer,
   type ScopeTier,
 } from "./scope.js";
 export {

@@ -3,14 +3,20 @@
  * `synapse-skills` — the skills server and its management CLI
  * (docs/design/skills-mcp.md).
  *
- *   synapse-skills serve    [--agent A [--desk D]] [--read-only]   stdio MCP server, one per CLI session
- *   synapse-skills list     [--agent A [--desk D] | --global] [--tier]
- *   synapse-skills show     <name> [--agent A [--desk D]]
- *   synapse-skills import   <dir...> (--global | --agent A [--desk D]) [--dry-run]
- *   synapse-skills export   <name...> | --all  --out <dir> [--agent A [--desk D]] [--force]
- *   synapse-skills rm       <name> (--global | --agent A [--desk D])
+ *   synapse-skills serve    [--agent A [DESK]] [--read-only]   stdio MCP server, one per CLI session
+ *   synapse-skills list     [--agent A [DESK] | --global] [--tier]
+ *   synapse-skills show     <name> [--agent A [DESK]]
+ *   synapse-skills import   <dir...> (--global | --agent A [DESK]) [--dry-run]
+ *   synapse-skills export   <name...> | --all  --out <dir> [--agent A [DESK]] [--force]
+ *   synapse-skills rm       <name> (--global | --agent A [DESK])
  *   synapse-skills history  <name>
- *   synapse-skills register <claude|codex|agy> [--agent A [--desk D]] [--out <dir>]
+ *   synapse-skills register <claude|codex|agy> [--agent A [DESK]] [--out <dir>]
+ *
+ * DESK names the desk tier:
+ *   --desk-id I [--desk N]   keyed on the desk id I; N (the desk's name) is read
+ *                            as the legacy key of rows written before the id
+ *   --desk D                 keyed on D (older callers: the desk's name)
+ * Writes (`import`, `rm`) go to the desk id when it is given.
  *
  * Every command takes `--db <abs path>` (else $SYNAPSE_SKILLS_DB, else
  * ~/.local/share/synapse-skills/skills.db).
@@ -25,7 +31,15 @@ import {
   codexSkillsConfigToml,
   defaultSkillsDbPath,
 } from "./registration.js";
-import { GLOBAL_SCOPE, agentScope, deskScope, describeScope, tierOf, type SkillScope } from "./scope.js";
+import {
+  GLOBAL_SCOPE,
+  agentScope,
+  deskScope,
+  deskViewer,
+  describeScope,
+  tierOf,
+  type SkillViewer,
+} from "./scope.js";
 import { createSkillsMcpServer } from "./server.js";
 import { findSkillDirs, readSkillDir, renderSkillMd, writeSkillDir } from "./skill-dir.js";
 import { SkillStore } from "./store.js";
@@ -34,6 +48,7 @@ const OPTIONS = {
   db: { type: "string" },
   agent: { type: "string" },
   desk: { type: "string" },
+  "desk-id": { type: "string" },
   global: { type: "boolean" },
   tier: { type: "boolean" },
   all: { type: "boolean" },
@@ -62,14 +77,16 @@ function dbPath(v: Values, env: NodeJS.ProcessEnv): string {
 }
 
 /** The viewer for read commands: no flags = the everyone tier only. */
-function viewerOf(v: Values): SkillScope {
+function viewerOf(v: Values): SkillViewer {
   if (v.desk !== undefined && v.agent === undefined) throw new UsageError("--desk には --agent が要る");
+  if (v["desk-id"] !== undefined && v.agent === undefined) throw new UsageError("--desk-id には --agent が要る");
   if (v.agent === undefined) return GLOBAL_SCOPE;
+  if (v["desk-id"] !== undefined) return deskViewer(v.agent, v["desk-id"], v.desk);
   return v.desk === undefined ? agentScope(v.agent) : deskScope(v.agent, v.desk);
 }
 
 /** The target tier of a write: must be named explicitly, so nobody writes "everyone" by omission. */
-function targetOf(v: Values): SkillScope {
+function targetOf(v: Values): SkillViewer {
   if (v.global && v.agent !== undefined) throw new UsageError("--global と --agent は同時に使えない");
   if (v.global) return GLOBAL_SCOPE;
   if (v.agent === undefined) throw new UsageError("書き込む階層を --global か --agent <名前> で指定する");
@@ -188,10 +205,11 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
 
 function register(v: Values, rest: string[], env: NodeJS.ProcessEnv): number {
   const cli = one(rest, "register <claude|codex|agy>");
-  viewerOf(v); // validates --agent / --desk
+  viewerOf(v); // validates --agent / --desk-id / --desk
   const launch = {
     db: dbPath(v, env),
     ...(v.agent !== undefined ? { agent: v.agent } : {}),
+    ...(v["desk-id"] !== undefined ? { deskId: v["desk-id"] } : {}),
     ...(v.desk !== undefined ? { desk: v.desk } : {}),
     ...(v["read-only"] ? { readOnly: true } : {}),
     ...(v["cache-dir"] ? { cacheDir: path.resolve(v["cache-dir"]) } : {}),

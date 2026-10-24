@@ -23,7 +23,17 @@ export interface SkillsLaunchOptions {
   readonly db: string;
   /** The agent this session is. Omit for a session that sees only the everyone tier. */
   readonly agent?: string;
-  /** The desk of that agent, for desk-tier skills. Requires `agent`. */
+  /**
+   * The desk's id: the key of the desk tier (agt-215). Requires `agent`. With
+   * it, `desk` is the desk's name, read as the legacy key of rows written
+   * before the key was the id (`--desk-id <id> --desk <name>`).
+   */
+  readonly deskId?: string;
+  /**
+   * Without `deskId`: the desk tier's key (older callers pass the desk's name).
+   * With `deskId`: the desk's name, read only, for rows still keyed on it.
+   * Requires `agent`.
+   */
   readonly desk?: string;
   /** Hide `put_skill`. */
   readonly readOnly?: boolean;
@@ -45,8 +55,10 @@ function defaultCli(): string {
 export function skillsServerEntry(o: SkillsLaunchOptions): McpServerEntryConfig {
   if (!path.isAbsolute(o.db)) throw new Error(`skills db path must be absolute: ${o.db}`);
   if (o.desk !== undefined && o.agent === undefined) throw new Error("desk requires agent");
+  if (o.deskId !== undefined && o.agent === undefined) throw new Error("deskId requires agent");
   const args = [o.cli ?? defaultCli(), "serve", "--db", o.db];
   if (o.agent !== undefined) args.push("--agent", o.agent);
+  if (o.deskId !== undefined) args.push("--desk-id", o.deskId);
   if (o.desk !== undefined) args.push("--desk", o.desk);
   if (o.readOnly) args.push("--read-only");
   if (o.cacheDir !== undefined) args.push("--cache-dir", o.cacheDir);

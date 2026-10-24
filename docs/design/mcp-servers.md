@@ -60,7 +60,7 @@
 
 ## 階層
 
-**スキルと同じ 3 つ: 全員 → エージェント → Desk。同じ名前なら下の階層が勝つ。** キーもスキルと同じ（`agent: ""` が全員、`desk: ""` は Desk でない）。
+**スキルと同じ 3 つ: 全員 → エージェント → Desk。同じ名前なら下の階層が勝つ。** キーもスキルと同じ（`agent: ""` が全員、`desk: ""` は Desk でない）。Desk の階層の鍵は **Desk の id**（agt-215）で、Desk の名前を鍵にした旧い行は、閲覧者の `legacyDesk`（Desk の名前）として id の下で読む（[skills-mcp.md「Desk の階層の鍵は Desk の id」](skills-mcp.md#desk-の階層の鍵は-desk-の-idagt-215)）。
 
 - 勝った版が `enabled: false` なら、その閲覧者には渡さない（`effective().disabled` に入り、起動の結果の `disabled` に名前が出る）。全員の階層のサーバーを、あるエージェントや Desk だけで止められる
 - **下の階層の削除の印（tombstone）は上を隠さない。** 上書きを消すと、上の階層のものが見えるようになる（スキルと同じ）
@@ -79,7 +79,7 @@
 
 ## 書き込みの権限
 
-**書けるのは管理用 CLI だけ**（`synapse-mcp-servers put` / `rm`）。書き込む階層は `--global` か `--agent <名前>`（Desk なら `--desk <名前>` も）で必ず名指しする。MCP から台帳を書く道は無い（任意のコマンドを起動させられるため）。
+**書けるのは管理用 CLI だけ**（`synapse-mcp-servers put` / `rm`）。書き込む階層は `--global` か `--agent <名前>`（Desk なら `--desk-id <Desk の id>`。旧いアプリは `--desk <名前>`）で必ず名指しする。MCP から台帳を書く道は無い（任意のコマンドを起動させられるため）。
 
 ## 起動時の渡し方（`mcpServersLaunch`）
 
@@ -123,10 +123,11 @@ stdio では `args` を空でも必ず送る。Codex は `-c` の値を `~/.code
 
 ```ts
 import { McpServerStore, mcpServersLaunch, claudeMcpConfigArgs } from "@synapse-chat/mcp/mcp-servers";
-import { deskScope } from "@synapse-chat/mcp/skills";
+import { deskViewer } from "@synapse-chat/mcp/skills";
 
 const store = McpServerStore.open(db);
-const ledger = store.effective(deskScope("Homura", "artiflow"));
+// Desk の id が鍵。名前は、移し替えの前の行を読むためだけ
+const ledger = store.effective(deskViewer("Homura", deskId, deskName));
 const mcp = mcpServersLaunch("claude", ledger, { env: process.env, reserved: ["skills", ...myServerNames] });
 const args = claudeMcpConfigArgs(claudeSkillsMcpConfig(skills).mcpServers, myServers, mcp.mcpServers);
 for (const s of mcp.skipped) log.warn(`MCP server ${s.name} not delivered: ${s.reason}`);
@@ -135,16 +136,17 @@ for (const s of mcp.skipped) log.warn(`MCP server ${s.name} not delivered: ${s.r
 ## 管理用 CLI（`synapse-mcp-servers`）
 
 ```
-synapse-mcp-servers list    [--effective --agent A [--desk D]]
-synapse-mcp-servers show    <name> [--global | --agent A [--desk D]] [--effective]
-synapse-mcp-servers put     <file.json> (--global | --agent A [--desk D]) [--dry-run]
-synapse-mcp-servers rm      <name> (--global | --agent A [--desk D])
+synapse-mcp-servers list    [--effective --agent A [DESK]]
+synapse-mcp-servers show    <name> [--global | --agent A [DESK]] [--effective]
+synapse-mcp-servers put     <file.json> (--global | --agent A [DESK]) [--dry-run]
+synapse-mcp-servers rm      <name> (--global | --agent A [DESK])
 synapse-mcp-servers history <name>
-synapse-mcp-servers launch  <claude|codex|agy> [--agent A [--desk D]]
+synapse-mcp-servers launch  <claude|codex|agy> [--agent A [DESK]]
+# DESK: --desk-id I [--desk N]（I が鍵。N は旧い鍵として読むだけ）か、--desk D（D が鍵。旧いアプリ）
 ```
 
 - 指示書の CLI（`synapse-instructions`）と別の bin にした。スキル・指示書も台帳ごとに bin が分かれており、`put` の入力（JSON）も `rm` の引数（名前）も指示書と違うため
 - `put` は JSON のファイル 1 つに 1 件。`--dry-run` は検査だけをして DB を開かない（作らない）
 - `show` の出力はそのまま `put` に戻せる形。`--effective` はその閲覧者に勝つ版（どの階層かは stderr）
 - `launch` は `mcpServersLaunch()` の結果を JSON で出す。**この CLI を動かしている環境で `${…}` を展開するので、秘密が出力に出る**
-- `synapse-instructions launch … [--agent A [--desk D]]` の出力にも、`mcp` として同じものが入る（起動に載るものを 1 回で確かめる用）。指示書の `args` / `files` とは混ぜない
+- `synapse-instructions launch … [--agent A [--desk-id I] [--desk D]]` の出力にも、`mcp` として同じものが入る（起動に載るものを 1 回で確かめる用）。指示書の `args` / `files` とは混ぜない

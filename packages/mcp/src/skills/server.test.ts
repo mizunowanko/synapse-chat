@@ -6,7 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { materializeSkill } from "./materialize.js";
-import { GLOBAL_SCOPE, agentScope, deskScope, type SkillScope } from "./scope.js";
+import { GLOBAL_SCOPE, agentScope, deskScope, deskViewer, type SkillViewer } from "./scope.js";
 import { createSkillsMcpServer } from "./server.js";
 import { SkillStore } from "./store.js";
 
@@ -35,7 +35,7 @@ afterEach(async () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-async function connect(viewer: SkillScope, opts: { writable?: boolean; logFile?: string } = {}) {
+async function connect(viewer: SkillViewer, opts: { writable?: boolean; logFile?: string } = {}) {
   const handle = createSkillsMcpServer({ store, viewer, cacheRoot, ...opts });
   const [a, b] = InMemoryTransport.createLinkedPair();
   await handle.server.connect(a);
@@ -201,5 +201,32 @@ describe("put_skill — the write rule", () => {
     const r = await a.call("put_skill", { name: "evil", description: "d", body: "b", files: [{ path: "../../x", content: "x" }] });
     expect(r.isError).toBe(true);
     expect(store.history("evil")).toEqual([]);
+  });
+});
+
+describe("a desk keyed on its id (agt-215)", () => {
+  it("lists the rows under the id and under the legacy name as this desk's", async () => {
+    store.put(deskScope("A", "main"), { name: "old-note", description: "名前の Desk", body: "by name" });
+    store.put(deskScope("A", "desk-1"), { name: "new-note", description: "id の Desk", body: "by id" });
+    const d = await connect(deskViewer("A", "desk-1", "main"));
+    const r = await d.call("list_skills");
+    expect(r.text).toContain("new-note (v");
+    expect(r.text).toContain("old-note (v");
+    expect(r.text).toMatch(/new-note \(v\d+・この Desk\)/);
+    expect(r.text).toMatch(/old-note \(v\d+・この Desk\)/);
+    expect(r.text).not.toContain("desk-1");
+    expect((await d.call("get_skill", { name: "old-note" })).text).toContain("by name");
+  });
+
+  it("put_skill scope: desk writes under the id, carrying over from the legacy row", async () => {
+    store.put(deskScope("A", "main"), { name: "old-note", description: "名前の Desk", body: "by name" });
+    const d = await connect(deskViewer("A", "desk-1", "main"));
+    const r = await d.call("put_skill", { name: "old-note", body: "edited", scope: "desk" });
+    expect(r.isError).toBe(false);
+    expect(r.text).toContain("この Desk");
+    const rec = store.latestIn(deskScope("A", "desk-1"), "old-note");
+    expect(rec?.body).toBe("edited");
+    expect(rec?.description).toBe("名前の Desk");
+    expect(store.resolve(deskViewer("A", "desk-1", "main"), "old-note")?.body).toBe("edited");
   });
 });

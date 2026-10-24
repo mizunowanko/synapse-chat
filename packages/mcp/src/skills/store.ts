@@ -15,6 +15,7 @@ import {
   assertSkillName,
   visibleScopes,
   type SkillScope,
+  type SkillViewer,
 } from "./scope.js";
 
 /** A file shipped with a skill (a script, a template…). `path` is relative to the skill directory. */
@@ -193,7 +194,7 @@ export class SkillStore {
   }
 
   /** The skill `viewer` sees under `name`: the lowest tier that holds a live version. */
-  resolve(viewer: SkillScope, name: string): SkillRecord | undefined {
+  resolve(viewer: SkillViewer, name: string): SkillRecord | undefined {
     for (const scope of visibleScopes(viewer)) {
       const latest = this.latestIn(scope, name);
       if (latest && !latest.deleted) return latest;
@@ -216,7 +217,7 @@ export class SkillStore {
   }
 
   /** Every skill `viewer` sees, after the lower tiers have shadowed the upper ones. */
-  list(viewer: SkillScope): SkillRecord[] {
+  list(viewer: SkillViewer): SkillRecord[] {
     const seen = new Map<string, SkillRecord>();
     for (const scope of visibleScopes(viewer)) {
       // A tombstone in a lower tier does not hide the upper tier: deleting an
@@ -246,8 +247,10 @@ export class SkillStore {
   /**
    * Write a new version of `input.name` into `scope`. Permission checks are the
    * caller's job (`mcpWriteRefusal`); the store writes wherever it is told.
+   * A `legacyDesk` on `scope` is only read: what the omitted description,
+   * frontmatter and files are carried over from.
    */
-  put(scope: SkillScope, input: PutSkillInput): PutSkillResult {
+  put(scope: SkillViewer, input: PutSkillInput): PutSkillResult {
     assertSkillName(input.name);
     const files = input.files?.map((f) => {
       assertSkillFilePath(f.path);

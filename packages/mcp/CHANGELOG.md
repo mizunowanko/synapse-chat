@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.8.0
+
+### Minor Changes
+
+- スキル・MCP サーバーの台帳の Desk の階層を、Desk の id で引けるようにした（agt-215）。`SkillsLaunchOptions.deskId`・`deskViewer()`・CLI の `--desk-id`（`synapse-skills` / `synapse-mcp-servers` / `synapse-instructions launch`）。id を渡すとき、Desk の名前（`desk` / `--desk`）は、名前を鍵にした旧い行を id の下で読むための旧い鍵（`legacyDesk`）になる（読むだけ。書き込みは id へ）。`--desk` だけの呼び出しはいままでどおり、その値を鍵にする。
+
 ## 0.7.0
 
 ### Minor Changes

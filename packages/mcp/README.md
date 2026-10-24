@@ -77,7 +77,7 @@ See [`docs/mcp-helper-guide.md`](../../docs/mcp-helper-guide.md) for the full wa
 
 ## Skills server (`@synapse-chat/mcp/skills`, `synapse-skills`)
 
-Agent skills (`SKILL.md` + attached files) kept in one SQLite file and handed to Claude Code / Codex / agy by a stdio MCP server started per CLI session. Tiers: everyone → agent → desk (the lower tier wins). Needs Node 22.13+ (`node:sqlite`).
+Agent skills (`SKILL.md` + attached files) kept in one SQLite file and handed to Claude Code / Codex / agy by a stdio MCP server started per CLI session. Tiers: everyone → agent → desk (the lower tier wins). The desk tier is keyed on the desk id (`--desk-id`, `deskId`, `deskViewer()`), so renaming a desk does not cut it off; rows an older app keyed on the desk's name are read beneath the id through `legacyDesk` (`--desk <name>`) until the app migrates them. Needs Node 22.13+ (`node:sqlite`).
 
 ```bash
 synapse-skills import ./skills --global --db /abs/skills.db          # bring existing skill dirs in
@@ -101,7 +101,7 @@ synapse-instructions import ./agents/CLAUDE.md --global --db /abs/skills.db
 synapse-instructions import ./agents/Tsukuyo/CLAUDE.md --agent Tsukuyo --db /abs/skills.db
 synapse-instructions show --agent Tsukuyo --effective --db /abs/skills.db
 synapse-instructions launch claude --cwd /abs/agents/Tsukuyo --agent Tsukuyo --replace /abs/agents/Tsukuyo --db /abs/skills.db
-# the output also carries the MCP server ledger under `mcp` (below); add --desk D for desk-tier servers
+# the output also carries the MCP server ledger under `mcp` (below); add --desk-id I [--desk <name>] for desk-tier servers
 ```
 
 ```ts
@@ -122,14 +122,14 @@ cat > artiflow.json <<'JSON'
  "env": {"ARTIFLOW_TOKEN": "${ARTIFLOW_TOKEN}"}, "cwd": "/srv/artiflow"}
 JSON
 synapse-mcp-servers put artiflow.json --agent Homura --db /abs/skills.db
-synapse-mcp-servers list --effective --agent Homura --desk artiflow --db /abs/skills.db
+synapse-mcp-servers list --effective --agent Homura --desk-id <desk id> --desk artiflow --db /abs/skills.db
 synapse-mcp-servers launch codex --agent Homura --db /abs/skills.db   # what Codex would get (secrets expanded)
 synapse-mcp-servers history artiflow --db /abs/skills.db
 ```
 
 ```ts
 import { McpServerStore, mcpServersLaunch, claudeMcpConfigArgs } from "@synapse-chat/mcp/mcp-servers";
-const ledger = McpServerStore.open(db).effective(deskScope("Homura", "artiflow"));
+const ledger = McpServerStore.open(db).effective(deskViewer("Homura", deskId, deskName)); // deskName: legacy rows only
 const mcp = mcpServersLaunch(cli, ledger, { env: process.env, reserved: ["skills", ...yourOwnNames] });
 // claude: claudeMcpConfigArgs(yourServers, mcp.mcpServers) → one --mcp-config
 // codex:  [...yourArgs, ...mcp.args]          (-c mcp_servers.<name>.…)

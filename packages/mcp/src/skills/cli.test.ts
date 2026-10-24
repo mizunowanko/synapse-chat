@@ -138,6 +138,29 @@ describe("export / list / rm / history", () => {
   });
 });
 
+describe("--desk-id (agt-215)", () => {
+  it("imports into the desk id, and reads the legacy name beneath it", async () => {
+    write("old/note/SKILL.md", "---\nname: note\ndescription: 名前の Desk\n---\n\nby name\n");
+    write("new/fresh/SKILL.md", "---\nname: fresh\ndescription: id の Desk\n---\n\nby id\n");
+    await run("import", path.join(dir, "old"), "--agent", "A", "--desk", "main");
+    await run("import", path.join(dir, "new"), "--agent", "A", "--desk-id", "desk-1", "--desk", "main");
+    const store = SkillStore.open(db);
+    try {
+      expect(store.latestIn({ agent: "A", desk: "desk-1" }, "fresh")?.body.trim()).toBe("by id");
+      expect(store.latestIn({ agent: "A", desk: "main" }, "fresh")).toBeUndefined();
+    } finally {
+      store.close();
+    }
+    output = [];
+    await run("list", "--agent", "A", "--desk-id", "desk-1", "--desk", "main");
+    expect(output.join("").trim().split("\n").map((l) => l.split("\t").slice(0, 3).join(" "))).toEqual([
+      "fresh v1 Desk A/desk-1",
+      "note v1 Desk A/main",
+    ]);
+    await expect(run("list", "--desk-id", "desk-1")).rejects.toThrow(/--agent/);
+  });
+});
+
 describe("registration", () => {
   const launch = { db: "/abs/skills.db", agent: "Tsukuyo", desk: "artiflow", node: "/usr/bin/node", cli: "/pkg/cli.js" };
 
@@ -171,5 +194,16 @@ describe("registration", () => {
   it("refuses a relative db path and a desk without an agent", () => {
     expect(() => skillsServerEntry({ db: "skills.db" })).toThrow(/absolute/);
     expect(() => skillsServerEntry({ db: "/a.db", desk: "d" })).toThrow(/agent/);
+    expect(() => skillsServerEntry({ db: "/a.db", deskId: "d" })).toThrow(/agent/);
+  });
+
+  it("deskId keys the desk tier; the name goes along as the legacy key (agt-215)", () => {
+    expect(skillsServerEntry({ ...launch, deskId: "desk-1" }).args).toEqual([
+      "/pkg/cli.js", "serve", "--db", "/abs/skills.db", "--agent", "Tsukuyo", "--desk-id", "desk-1", "--desk", "artiflow",
+    ]);
+    const { desk: _desk, ...noName } = launch;
+    expect(skillsServerEntry({ ...noName, deskId: "desk-1" }).args).toEqual([
+      "/pkg/cli.js", "serve", "--db", "/abs/skills.db", "--agent", "Tsukuyo", "--desk-id", "desk-1",
+    ]);
   });
 });

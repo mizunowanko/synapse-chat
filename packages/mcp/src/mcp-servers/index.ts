@@ -24,6 +24,7 @@ export {
 export {
   McpServerStore,
   type McpServerScope,
+  type McpServerViewer,
   type McpServerRecord,
   type PutMcpServerInput,
   type PutMcpServerResult,

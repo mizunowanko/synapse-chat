@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { GLOBAL_SCOPE, agentScope, deskScope, mcpWriteRefusal, visibleScopes } from "./scope.js";
+import {
+  GLOBAL_SCOPE,
+  agentScope,
+  deskScope,
+  deskViewer,
+  isOwnDeskScope,
+  mcpWriteRefusal,
+  visibleScopes,
+} from "./scope.js";
 
 describe("mcpWriteRefusal — who may write which tier through MCP", () => {
   const a = agentScope("A");
@@ -46,5 +54,42 @@ describe("visibleScopes", () => {
     expect(() => agentScope("")).toThrow();
     expect(() => agentScope("a/b")).toThrow();
     expect(() => deskScope("A", " d")).toThrow();
+  });
+});
+
+describe("deskViewer — the desk tier keyed on the desk id, with the name read beneath it (agt-215)", () => {
+  it("reads the legacy key between the desk tier and the agent tier", () => {
+    expect(visibleScopes(deskViewer("A", "desk-1", "main"))).toEqual([
+      deskScope("A", "desk-1"),
+      deskScope("A", "main"),
+      agentScope("A"),
+      GLOBAL_SCOPE,
+    ]);
+  });
+
+  it("without a legacy key (or with the id itself) is a plain desk scope", () => {
+    expect(deskViewer("A", "desk-1")).toEqual(deskScope("A", "desk-1"));
+    expect(deskViewer("A", "desk-1", "desk-1")).toEqual(deskScope("A", "desk-1"));
+    expect(visibleScopes(deskViewer("A", "desk-1", "desk-1"))).toEqual([deskScope("A", "desk-1"), agentScope("A"), GLOBAL_SCOPE]);
+  });
+
+  it("checks both keys", () => {
+    expect(() => deskViewer("A", "a/b", "main")).toThrow();
+    expect(() => deskViewer("A", "desk-1", " main")).toThrow();
+  });
+
+  it("writes only to the desk id: the legacy key is not a tier the session may write", () => {
+    const v = deskViewer("A", "desk-1", "main");
+    expect(mcpWriteRefusal(v, deskScope("A", "desk-1"))).toBeNull();
+    expect(mcpWriteRefusal(v, deskScope("A", "main"))).toMatch(/main/);
+  });
+
+  it("knows its own desk tiers", () => {
+    const v = deskViewer("A", "desk-1", "main");
+    expect(isOwnDeskScope(v, deskScope("A", "desk-1"))).toBe(true);
+    expect(isOwnDeskScope(v, deskScope("A", "main"))).toBe(true);
+    expect(isOwnDeskScope(v, deskScope("A", "other"))).toBe(false);
+    expect(isOwnDeskScope(v, deskScope("B", "desk-1"))).toBe(false);
+    expect(isOwnDeskScope(v, agentScope("A"))).toBe(false);
   });
 });

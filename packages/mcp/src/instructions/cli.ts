@@ -9,7 +9,7 @@
  *   synapse-instructions export  (--global | --agent A) --out <file> [--force]
  *   synapse-instructions rm      (--global | --agent A)
  *   synapse-instructions history (--global | --agent A)
- *   synapse-instructions launch  <claude|codex|agy> --cwd <dir> [--agent A [--desk D]] [--replace <dir>]...
+ *   synapse-instructions launch  <claude|codex|agy> --cwd <dir> [--agent A [--desk-id I] [--desk D]] [--replace <dir>]...
  *
  * Every command takes `--db <abs path>` (else $SYNAPSE_SKILLS_DB, else
  * ~/.local/share/synapse-skills/skills.db) — the same file as the skills.
@@ -19,6 +19,8 @@
  * (`synapse-mcp-servers`, docs/design/mcp-servers.md) as that CLI takes them,
  * with `${NAME}` expanded from this process's environment. They are not
  * merged into `args` / `files`: the caller adds its own servers first.
+ * The ledger's desk tier is keyed on `--desk-id` (with `--desk` read as the
+ * legacy key of older rows), or on `--desk` alone (older callers).
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -26,7 +28,7 @@ import { parseArgs } from "node:util";
 import { mcpServersLaunch } from "../mcp-servers/launch.js";
 import { McpServerStore } from "../mcp-servers/store.js";
 import { defaultSkillsDbPath } from "../skills/registration.js";
-import { GLOBAL_SCOPE, agentScope, deskScope } from "../skills/scope.js";
+import { GLOBAL_SCOPE, agentScope, deskScope, deskViewer } from "../skills/scope.js";
 import { instructionsLaunch, isInstructionCli } from "./launch.js";
 import { effectiveInstructions, readInstructionFile } from "./render.js";
 import {
@@ -41,6 +43,7 @@ const OPTIONS = {
   db: { type: "string" },
   agent: { type: "string" },
   desk: { type: "string" },
+  "desk-id": { type: "string" },
   global: { type: "boolean" },
   effective: { type: "boolean" },
   out: { type: "string" },
@@ -156,6 +159,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
         if (!isInstructionCli(cli)) throw new UsageError(`unknown CLI: ${cli}`);
         if (!v.cwd) throw new UsageError("launch には --cwd <dir> が要る");
         if (v.desk !== undefined && v.agent === undefined) throw new UsageError("--desk には --agent が要る");
+        if (v["desk-id"] !== undefined && v.agent === undefined) throw new UsageError("--desk-id には --agent が要る");
         const eff = effectiveInstructions(store, v.agent);
         const launch = instructionsLaunch(cli, {
           text: eff.text,
@@ -164,7 +168,9 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
         });
         const viewer = v.agent === undefined
           ? GLOBAL_SCOPE
-          : v.desk === undefined ? agentScope(v.agent) : deskScope(v.agent, v.desk);
+          : v["desk-id"] !== undefined
+            ? deskViewer(v.agent, v["desk-id"], v.desk)
+            : v.desk === undefined ? agentScope(v.agent) : deskScope(v.agent, v.desk);
         const servers = McpServerStore.open(dbPath(v, env));
         try {
           const mcp = mcpServersLaunch(cli, servers.effective(viewer), { env });

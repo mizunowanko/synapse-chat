@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { GLOBAL_SCOPE, agentScope, deskScope } from "./scope.js";
+import { GLOBAL_SCOPE, agentScope, deskScope, deskViewer } from "./scope.js";
 import { SkillStore, type SkillFile } from "./store.js";
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -161,5 +161,53 @@ describe("validation", () => {
 
   it("refuses a relative store path", () => {
     expect(() => SkillStore.open("skills.db")).toThrow(/absolute/);
+  });
+});
+
+describe("the desk tier keyed on the desk id, reading rows still keyed on the name (agt-215)", () => {
+  beforeEach(() => {
+    store.put(GLOBAL_SCOPE, { name: "issue", description: "shared", body: "global" });
+    store.put(agentScope("A"), { name: "issue", description: "agent", body: "agent" });
+  });
+
+  it("before the migration: the rows under the name are seen through the legacy key", () => {
+    store.put(deskScope("A", "main"), { name: "issue", description: "old desk", body: "by name" });
+    store.put(deskScope("A", "main"), { name: "only-old", description: "old desk", body: "only by name" });
+    const v = deskViewer("A", "desk-1", "main");
+    expect(store.resolve(v, "issue")?.body).toBe("by name");
+    expect(store.list(v).map((r) => [r.name, r.scope.desk])).toEqual([["issue", "main"], ["only-old", "main"]]);
+  });
+
+  it("the desk id beats the legacy key", () => {
+    store.put(deskScope("A", "main"), { name: "issue", description: "old desk", body: "by name" });
+    store.put(deskScope("A", "desk-1"), { name: "issue", description: "new desk", body: "by id" });
+    expect(store.resolve(deskViewer("A", "desk-1", "main"), "issue")?.body).toBe("by id");
+  });
+
+  it("after the migration (rows under the id) the legacy key changes nothing", () => {
+    store.put(deskScope("A", "desk-1"), { name: "issue", description: "new desk", body: "by id" });
+    expect(store.resolve(deskViewer("A", "desk-1", "renamed"), "issue")?.body).toBe("by id");
+    expect(store.resolve(deskViewer("A", "desk-1"), "issue")?.body).toBe("by id");
+  });
+
+  it("a renamed desk keeps its id-keyed skills; another desk that takes the old name does not get them", () => {
+    store.put(deskScope("A", "desk-1"), { name: "issue", description: "new desk", body: "by id" });
+    expect(store.resolve(deskViewer("A", "desk-1", "after-rename"), "issue")?.body).toBe("by id");
+    expect(store.resolve(deskViewer("A", "desk-2", "main"), "issue")?.body).toBe("agent");
+  });
+
+  it("put() into the id carries over what the legacy row holds, and writes under the id", () => {
+    store.put(deskScope("A", "main"), {
+      name: "only-old",
+      description: "old desk",
+      body: "only by name",
+      files: [script("echo old")],
+    });
+    const target = { ...deskScope("A", "desk-1"), legacyDesk: "main" };
+    const { record } = store.put(target, { name: "only-old", body: "edited" });
+    expect(record.scope).toEqual(deskScope("A", "desk-1"));
+    expect(record.description).toBe("old desk");
+    expect(store.files(record).map((f) => dec(f.content))).toEqual(["echo old"]);
+    expect(store.latestIn(deskScope("A", "main"), "only-old")?.body).toBe("only by name");
   });
 });

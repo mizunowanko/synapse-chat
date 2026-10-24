@@ -3,12 +3,16 @@
  * `synapse-mcp-servers` — the management CLI of the MCP server ledger
  * (docs/design/mcp-servers.md).
  *
- *   synapse-mcp-servers list    [--effective --agent A [--desk D]]
- *   synapse-mcp-servers show    <name> [--global | --agent A [--desk D]] [--effective]
- *   synapse-mcp-servers put     <file.json> (--global | --agent A [--desk D]) [--dry-run]
- *   synapse-mcp-servers rm      <name> (--global | --agent A [--desk D])
+ *   synapse-mcp-servers list    [--effective --agent A [DESK]]
+ *   synapse-mcp-servers show    <name> [--global | --agent A [DESK]] [--effective]
+ *   synapse-mcp-servers put     <file.json> (--global | --agent A [DESK]) [--dry-run]
+ *   synapse-mcp-servers rm      <name> (--global | --agent A [DESK])
  *   synapse-mcp-servers history <name>
- *   synapse-mcp-servers launch  <claude|codex|agy> [--agent A [--desk D]]
+ *   synapse-mcp-servers launch  <claude|codex|agy> [--agent A [DESK]]
+ *
+ * DESK names the desk tier: `--desk-id I [--desk N]` keys it on the desk id I
+ * (N, the desk's name, is read as the legacy key of older rows by `--effective`
+ * and `launch`); `--desk D` keys it on D (older callers: the desk's name).
  *
  * Every command takes `--db <abs path>` (else $SYNAPSE_SKILLS_DB, else
  * ~/.local/share/synapse-skills/skills.db) — the same file as the skills.
@@ -28,7 +32,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { defaultSkillsDbPath } from "../skills/registration.js";
-import { GLOBAL_SCOPE, agentScope, describeScope, deskScope, type SkillScope } from "../skills/scope.js";
+import { GLOBAL_SCOPE, agentScope, describeScope, deskScope, deskViewer, type SkillViewer } from "../skills/scope.js";
 import { isInstructionCli } from "../instructions/launch.js";
 import { parseMcpServerSpec, plaintextSecretKeys } from "./config.js";
 import { mcpServersLaunch } from "./launch.js";
@@ -38,6 +42,7 @@ const OPTIONS = {
   db: { type: "string" },
   agent: { type: "string" },
   desk: { type: "string" },
+  "desk-id": { type: "string" },
   global: { type: "boolean" },
   effective: { type: "boolean" },
   "dry-run": { type: "boolean" },
@@ -58,15 +63,17 @@ function dbPath(v: Values, env: NodeJS.ProcessEnv): string {
   return path.resolve(v.db ?? env.SYNAPSE_SKILLS_DB ?? defaultSkillsDbPath(env));
 }
 
-/** `--agent` / `--desk` as a scope, or `undefined` when neither is given. */
-function scopeOf(v: Values): SkillScope | undefined {
+/** `--agent` / `--desk-id` / `--desk` as a scope, or `undefined` when none is given. */
+function scopeOf(v: Values): SkillViewer | undefined {
   if (v.desk !== undefined && v.agent === undefined) throw new UsageError("--desk には --agent が要る");
+  if (v["desk-id"] !== undefined && v.agent === undefined) throw new UsageError("--desk-id には --agent が要る");
   if (v.agent === undefined) return undefined;
+  if (v["desk-id"] !== undefined) return deskViewer(v.agent, v["desk-id"], v.desk);
   return v.desk === undefined ? agentScope(v.agent) : deskScope(v.agent, v.desk);
 }
 
-/** The tier a write names: must be named. */
-function targetOf(v: Values): SkillScope {
+/** The tier a write names: must be named. A desk write goes to the desk id when it is given. */
+function targetOf(v: Values): SkillViewer {
   const scope = scopeOf(v);
   if (v.global && scope) throw new UsageError("--global と --agent は同時に使えない");
   if (v.global) return GLOBAL_SCOPE;
@@ -148,7 +155,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
           if (!rec) throw new UsageError(`${describeScope(viewer)} には ${name} が無い`);
           err(`# ${describeScope(rec.scope)} v${rec.version}`);
         } else {
-          const scope = v.agent === undefined && v.desk === undefined ? GLOBAL_SCOPE : targetOf(v);
+          const scope = v.agent === undefined && v.desk === undefined && v["desk-id"] === undefined ? GLOBAL_SCOPE : targetOf(v);
           const latest = store.latestIn(scope, name);
           rec = latest && !latest.deleted ? latest : undefined;
           if (!rec) throw new UsageError(`${describeScope(scope)} に ${name} は無い`);
