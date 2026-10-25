@@ -126,6 +126,52 @@ describe("McpServerStore", () => {
     expect(store.resolve(deskViewer("A", "desk-2"), "a")?.config).toEqual(http("https://agent"));
   });
 
+  it("keeps the ui mark: a version of its own, listed by listApps, carried by a tombstone", () => {
+    store.put(GLOBAL_SCOPE, { name: "app", config: http("https://app"), ui: true });
+    store.put(agentScope("A"), { name: "app", config: http("https://app"), ui: true });
+    store.put(GLOBAL_SCOPE, { name: "plain", config: http("https://plain") });
+    expect(store.put(GLOBAL_SCOPE, { name: "app", config: http("https://app"), ui: true }).changed).toBe(false);
+    expect(store.resolve(agentScope("A"), "app")?.ui).toBe(true);
+    expect(store.resolve(GLOBAL_SCOPE, "plain")?.ui).toBe(false);
+    expect(store.listApps().map((r) => `${r.scope.agent}:${r.name}`)).toEqual([":app", "A:app"]);
+    expect(store.effective(agentScope("A")).enabled.map((r) => [r.name, r.ui])).toEqual([["app", true], ["plain", false]]);
+
+    // Taking the mark off is a new version.
+    expect(store.put(agentScope("A"), { name: "app", config: http("https://app") }).changed).toBe(true);
+    expect(store.listApps().map((r) => `${r.scope.agent}:${r.name}`)).toEqual([":app"]);
+    expect(store.remove(GLOBAL_SCOPE, "app")).toMatchObject({ deleted: true, ui: true });
+    expect(store.listApps()).toEqual([]);
+  });
+
+  it("adds the ui column to a table made before it, and a build without it still writes", () => {
+    store.close();
+    const { DatabaseSync } = loadSqlite();
+    const legacy = path.join(dir, "legacy.db");
+    const db = new DatabaseSync(legacy);
+    db.exec(`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      INSERT INTO meta VALUES ('mcp_servers_schema_version', '1');
+      CREATE TABLE mcp_server_versions (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, version INTEGER NOT NULL,
+        agent TEXT NOT NULL DEFAULT '', desk TEXT NOT NULL DEFAULT '', config TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+        deleted INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, author TEXT NOT NULL DEFAULT '', UNIQUE (name, version));
+      INSERT INTO mcp_server_versions (name, version, config, created_at) VALUES ('old', 1, '{"transport":"http","url":"https://old"}', 'then');`);
+    db.close();
+
+    store = McpServerStore.open(legacy);
+    expect(store.resolve(GLOBAL_SCOPE, "old")).toMatchObject({ ui: false, enabled: true });
+    store.put(GLOBAL_SCOPE, { name: "app", config: http("https://app"), ui: true });
+    store.close();
+
+    // What a build without the column does: it names its columns, the new one takes its default.
+    const older = new DatabaseSync(legacy);
+    expect((older.prepare("SELECT value FROM meta WHERE key = 'mcp_servers_schema_version'").get() as { value: string }).value).toBe("1");
+    older.prepare(
+      "INSERT INTO mcp_server_versions (name, version, agent, desk, config, enabled, deleted, created_at, author) VALUES ('x', 1, '', '', '{\"transport\":\"http\",\"url\":\"https://x\"}', 1, 0, 'now', '')",
+    ).run();
+    older.close();
+    store = McpServerStore.open(legacy);
+    expect(store.listAll().map((r) => [r.name, r.ui])).toEqual([["app", true], ["old", false], ["x", false]]);
+  });
+
   it("refuses a store from a newer build", () => {
     store.close();
     const { DatabaseSync } = loadSqlite();

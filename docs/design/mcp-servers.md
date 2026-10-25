@@ -40,12 +40,25 @@
 |---|---|---|
 | `name` | 必須 | 英数字で始まり、英数字・`-`・`_` だけ（`__` は不可）、64 文字まで。Claude のツール名 `mcp__<name>__<tool>` と Codex の TOML のキーにそのまま入るため。**`skills` と `peers` は使えない**（このパッケージが自分で渡す server の名前。[skills-mcp.md](skills-mcp.md)、[peers-mcp.md](peers-mcp.md)） |
 | `enabled` | 既定 `true` | `false` の版は起動時に渡さない（下の「階層」） |
+| `ui` | 既定 `false` | UI を持つ（MCP App）。下の「UI を持つ」。起動時の渡し方は変わらない |
 | `transport` | 必須 | `stdio` か `http`（Streamable HTTP）。旧い HTTP+SSE は扱わない |
 | `command` / `args` / `env` / `cwd` | stdio | `cwd` は絶対パス。`env` のキーは環境変数の名前の形 |
 | `url` / `headers` | http | `url` は http(s)。header の値に改行は入れられない |
 
 - 知らないキーは書き込みのときに断る（綴りの誤りを黙って捨てない）
 - 保存の前に正規化する（キーの順を固定し、空の `args` / `env` / `headers` は落とす）。中身が同じなら版を作らない
+
+## UI を持つ（`ui`）
+
+**MCP App（ツールが `ui://` のリソースを名指しし、アプリがそれをチャットのカードとして描く MCP サーバー）も、同じ台帳に 1 行で書く。** 行に `ui: true` の印を付けると、アプリは「どのサーバーから UI を取りに行くか」を台帳から知る。CLI への渡し方（`mcpServersLaunch`）は印があっても無くても同じで、CLI にとっては普通の MCP サーバー。
+
+きっかけは、familia が MCP App を台帳とは別のファイル（`data/mcp-apps.json`）で持っていて、MCP サーバーの登録が 2 か所に分かれていたこと（agents-familia agt-224）。
+
+- 書き方は `put` の JSON の `"ui": true`、または `put --ui`。`show` は印のある行だけ `"ui": true` を出す（そのまま `put` に戻せる）
+- 読み方は `McpServerRecord.ui`（`resolve` / `effective` / `listAll` の結果すべてに入る）と、全階層の印のある生きた行を返す `McpServerStore.listApps()`。`enabled: false` の行も返すので、止めてある上書きをどう扱うかは呼ぶ側が決める
+- 管理用 CLI では `list --ui`（`--effective` とも組み合わせられる）。`list` / `history` の行に `ui` か `-` の列が入る
+- 印は版の中身の一部。印だけを付け外ししても新しい版になる。削除の印（tombstone）は消した版の印を持つ
+- **列を足しただけで、スキーマの版（`mcp_servers_schema_version`）は 1 のまま。** 列の無い表は開いたときに `ALTER TABLE … ADD COLUMN ui INTEGER NOT NULL DEFAULT 0` で足す（いまある行は印なし）。印を知らない旧い版も同じファイルを開けて読めるが、旧い版の `put` が書いた行は印なし（`ui = 0`）になる。印のある行は新しい版の CLI で書く
 
 ## 秘密の扱い
 
@@ -136,9 +149,9 @@ for (const s of mcp.skipped) log.warn(`MCP server ${s.name} not delivered: ${s.r
 ## 管理用 CLI（`synapse-mcp-servers`）
 
 ```
-synapse-mcp-servers list    [--effective --agent A [DESK]]
+synapse-mcp-servers list    [--effective --agent A [DESK]] [--ui]
 synapse-mcp-servers show    <name> [--global | --agent A [DESK]] [--effective]
-synapse-mcp-servers put     <file.json> (--global | --agent A [DESK]) [--dry-run]
+synapse-mcp-servers put     <file.json> (--global | --agent A [DESK]) [--ui] [--dry-run]
 synapse-mcp-servers rm      <name> (--global | --agent A [DESK])
 synapse-mcp-servers history <name>
 synapse-mcp-servers launch  <claude|codex|agy> [--agent A [DESK]]

@@ -3,9 +3,9 @@
  * `synapse-mcp-servers` — the management CLI of the MCP server ledger
  * (docs/design/mcp-servers.md).
  *
- *   synapse-mcp-servers list    [--effective --agent A [DESK]]
+ *   synapse-mcp-servers list    [--effective --agent A [DESK]] [--ui]
  *   synapse-mcp-servers show    <name> [--global | --agent A [DESK]] [--effective]
- *   synapse-mcp-servers put     <file.json> (--global | --agent A [DESK]) [--dry-run]
+ *   synapse-mcp-servers put     <file.json> (--global | --agent A [DESK]) [--ui] [--dry-run]
  *   synapse-mcp-servers rm      <name> (--global | --agent A [DESK])
  *   synapse-mcp-servers history <name>
  *   synapse-mcp-servers launch  <claude|codex|agy> [--agent A [DESK]]
@@ -24,6 +24,8 @@
  *   {"name": "yatagarasu", "transport": "http", "url": "${YATAGARASU_URL}",
  *    "headers": {"Authorization": "Bearer ${YATAGARASU_TOKEN}"}}
  * `${NAME}` is expanded from the environment at launch; `$${` is a literal `${`.
+ * `"ui": true` (or `put --ui`) marks a server that has a UI (an MCP App); the
+ * launch is the same, an app reads the mark (`list --ui` lists only those).
  *
  * `launch` prints, as JSON, what the CLI would get, with `${NAME}` expanded
  * from this process's environment (so it may print secrets).
@@ -44,6 +46,7 @@ const OPTIONS = {
   desk: { type: "string" },
   "desk-id": { type: "string" },
   global: { type: "boolean" },
+  ui: { type: "boolean" },
   effective: { type: "boolean" },
   "dry-run": { type: "boolean" },
   help: { type: "boolean", short: "h" },
@@ -88,6 +91,7 @@ function line(r: McpServerRecord): string {
     `v${r.version}`,
     r.config.transport,
     r.enabled ? "on" : "off",
+    r.ui ? "ui" : "-",
     r.createdAt,
     r.author,
   ].join("\t");
@@ -95,7 +99,7 @@ function line(r: McpServerRecord): string {
 
 /** The record as a `put` file (what `show` prints). */
 function asSpec(r: McpServerRecord): Record<string, unknown> {
-  return { name: r.name, enabled: r.enabled, ...r.config };
+  return { name: r.name, enabled: r.enabled, ...(r.ui ? { ui: true } : {}), ...r.config };
 }
 
 export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env): Promise<number> {
@@ -116,16 +120,18 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
     } catch (e) {
       throw new UsageError(`${file} を JSON として読めない: ${e instanceof Error ? e.message : String(e)}`);
     }
-    const { name, enabled, ...config } = parseMcpServerSpec(raw);
+    const spec = parseMcpServerSpec(raw);
+    const { name, enabled, ui: uiInFile, ...config } = spec;
+    const ui = uiInFile || v.ui === true;
     for (const key of plaintextSecretKeys(config)) {
       err(`warning: ${name} の ${key} は値がそのまま書かれている。秘密なら \${環境変数} で参照する`);
     }
     if (v["dry-run"]) {
-      out(`would put ${name} (${config.transport}, ${enabled ? "on" : "off"}) → ${describeScope(target)}`);
+      out(`would put ${name} (${config.transport}, ${enabled ? "on" : "off"}${ui ? ", ui" : ""}) → ${describeScope(target)}`);
       return 0;
     }
     return withStore(v, env, (store) => {
-      const { record, changed } = store.put(target, { name, config, enabled, author: "cli:put" });
+      const { record, changed } = store.put(target, { name, config, enabled, ui, author: "cli:put" });
       out(`${changed ? "put" : "unchanged"} ${name} → ${describeScope(target)} v${record.version}`);
       return 0;
     });
@@ -138,10 +144,12 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
           const viewer = scopeOf(v);
           if (!viewer) throw new UsageError("--effective には --agent（と --desk）を付ける");
           const eff = store.effective(viewer);
-          for (const r of [...eff.enabled, ...eff.disabled].sort((a, b) => a.name.localeCompare(b.name))) out(line(r));
+          for (const r of [...eff.enabled, ...eff.disabled].sort((a, b) => a.name.localeCompare(b.name))) {
+            if (!v.ui || r.ui) out(line(r));
+          }
           return 0;
         }
-        for (const r of store.listAll()) out(line(r));
+        for (const r of v.ui ? store.listApps() : store.listAll()) out(line(r));
         return 0;
       }
 
@@ -176,7 +184,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
       case "history": {
         const name = one(rest, "history <name>");
         for (const r of store.history(name)) {
-          out([`v${r.version}`, r.deleted ? "deleted" : "live", describeScope(r.scope), r.config.transport, r.enabled ? "on" : "off", r.createdAt, r.author].join("\t"));
+          out([`v${r.version}`, r.deleted ? "deleted" : "live", describeScope(r.scope), r.config.transport, r.enabled ? "on" : "off", r.ui ? "ui" : "-", r.createdAt, r.author].join("\t"));
         }
         return 0;
       }

@@ -32,6 +32,8 @@ export type McpServerSpec = McpServerConfig & {
   readonly name: string;
   /** Default `true`. */
   readonly enabled?: boolean;
+  /** Default `false`: the server has a UI (an MCP App). See `McpServerRecord.ui`. */
+  readonly ui?: boolean;
 };
 
 /**
@@ -193,13 +195,14 @@ export function parseMcpServerConfig(raw: unknown): McpServerConfig {
   }
 }
 
-/** A `put` input (a parsed JSON file): name, enabled, and the transport keys. */
-export function parseMcpServerSpec(raw: unknown): McpServerSpec & { enabled: boolean } {
+/** A `put` input (a parsed JSON file): name, enabled, ui, and the transport keys. */
+export function parseMcpServerSpec(raw: unknown): McpServerSpec & { enabled: boolean; ui: boolean } {
   if (!plainObject(raw)) throw new Error("MCP server must be a JSON object");
-  const { name, enabled, ...config } = raw;
+  const { name, enabled, ui, ...config } = raw;
   assertMcpServerName(name);
   if (enabled !== undefined && typeof enabled !== "boolean") throw new Error("enabled must be true or false");
-  return { name, enabled: enabled ?? true, ...parseMcpServerConfig(config) };
+  if (ui !== undefined && typeof ui !== "boolean") throw new Error("ui must be true or false");
+  return { name, enabled: enabled ?? true, ui: ui ?? false, ...parseMcpServerConfig(config) };
 }
 
 /**

@@ -33,6 +33,12 @@ export interface McpServerRecord {
   readonly version: number;
   readonly scope: McpServerScope;
   readonly enabled: boolean;
+  /**
+   * The server has a UI (an MCP App: its tools name `ui://` resources an app draws as cards,
+   * docs/design/mcp-servers.md「UI を持つ」). The launch is the same either way; an app reads it
+   * to know which servers to fetch UIs from. On a tombstone, the flag of the version it removed.
+   */
+  readonly ui: boolean;
   /** The transport. On a tombstone, the config of the version it removed. */
   readonly config: McpServerConfig;
   readonly deleted: boolean;
@@ -45,6 +51,8 @@ export interface PutMcpServerInput {
   readonly config: McpServerConfig;
   /** Default `true`. */
   readonly enabled?: boolean;
+  /** Default `false`. See {@link McpServerRecord.ui}. */
+  readonly ui?: boolean;
   /** Free-form note of who wrote it (`cli:put`…). */
   readonly author?: string;
 }
@@ -61,6 +69,12 @@ export interface PutMcpServerResult {
  * unchanged, and ignores this table.
  */
 const SCHEMA_KEY = "mcp_servers_schema_version";
+/**
+ * Still 1 with the `ui` column: the column is only added (default 0), so a
+ * build that does not know it opens the file, reads it, and writes rows
+ * without it (as `ui = 0`). Bumping the number would make such a build refuse
+ * the whole ledger.
+ */
 const SCHEMA_VERSION = 1;
 
 const SCHEMA = `
@@ -73,6 +87,7 @@ CREATE TABLE IF NOT EXISTS mcp_server_versions (
   desk        TEXT    NOT NULL DEFAULT '',
   config      TEXT    NOT NULL,
   enabled     INTEGER NOT NULL DEFAULT 1,
+  ui          INTEGER NOT NULL DEFAULT 0,
   deleted     INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT    NOT NULL,
   author      TEXT    NOT NULL DEFAULT '',
@@ -80,6 +95,14 @@ CREATE TABLE IF NOT EXISTS mcp_server_versions (
 );
 CREATE INDEX IF NOT EXISTS mcp_server_versions_scope ON mcp_server_versions (agent, desk, name, version);
 `;
+
+/** A table made before the `ui` column gets it on open (rows already there: no UI). */
+function addUiColumn(db: DatabaseSync): void {
+  const columns = db.prepare("PRAGMA table_info(mcp_server_versions)").all() as unknown as { name: string }[];
+  if (!columns.some((c) => c.name === "ui")) {
+    db.exec("ALTER TABLE mcp_server_versions ADD COLUMN ui INTEGER NOT NULL DEFAULT 0");
+  }
+}
 
 interface Row {
   id: number;
@@ -89,6 +112,7 @@ interface Row {
   desk: string;
   config: string;
   enabled: number;
+  ui: number;
   deleted: number;
   created_at: string;
   author: string;
@@ -101,6 +125,7 @@ function toRecord(row: Row): McpServerRecord {
     version: row.version,
     scope: { agent: row.agent, desk: row.desk },
     enabled: row.enabled !== 0,
+    ui: row.ui !== 0,
     config: JSON.parse(row.config) as McpServerConfig,
     deleted: row.deleted !== 0,
     createdAt: row.created_at,
@@ -126,6 +151,7 @@ export class McpServerStore {
     const db = new (loadSqlite().DatabaseSync)(file);
     db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
     db.exec(SCHEMA);
+    addUiColumn(db);
     const row = db.prepare("SELECT value FROM meta WHERE key = ?").get(SCHEMA_KEY) as { value: string } | undefined;
     if (!row) {
       db.prepare("INSERT INTO meta (key, value) VALUES (?, ?)").run(SCHEMA_KEY, String(SCHEMA_VERSION));
@@ -190,6 +216,15 @@ export class McpServerStore {
   }
 
   /**
+   * Every live server marked as having a UI ({@link McpServerRecord.ui}), in every tier, in
+   * {@link listAll}'s order; `enabled: false` ones too (the caller decides what a switched-off
+   * override means for it).
+   */
+  listApps(): McpServerRecord[] {
+    return this.listAll().filter((r) => r.ui);
+  }
+
+  /**
    * Every server `viewer` sees after the lower tiers have shadowed the upper
    * ones. A lower tier's `enabled: false` switches the upper tier's server off
    * for this viewer; a lower tier's tombstone does not hide the upper tier
@@ -221,12 +256,16 @@ export class McpServerStore {
     assertMcpServerName(input.name);
     const config = JSON.stringify(parseMcpServerConfig(input.config));
     const enabled = input.enabled ?? true;
+    const ui = input.ui ?? false;
     return this.transaction(() => {
       const latest = this.latestIn(scope, input.name);
-      if (latest && !latest.deleted && latest.enabled === enabled && JSON.stringify(latest.config) === config) {
+      if (
+        latest && !latest.deleted && latest.enabled === enabled && latest.ui === ui &&
+        JSON.stringify(latest.config) === config
+      ) {
         return { record: latest, changed: false };
       }
-      return { record: this.insert(scope, input.name, config, enabled, false, input.author ?? ""), changed: true };
+      return { record: this.insert(scope, input.name, config, { enabled, ui }, false, input.author ?? ""), changed: true };
     });
   }
 
@@ -235,7 +274,7 @@ export class McpServerStore {
     return this.transaction(() => {
       const latest = this.latestIn(scope, name);
       if (!latest || latest.deleted) return undefined;
-      return this.insert(scope, name, JSON.stringify(latest.config), latest.enabled, true, author);
+      return this.insert(scope, name, JSON.stringify(latest.config), { enabled: latest.enabled, ui: latest.ui }, true, author);
     });
   }
 
@@ -243,7 +282,7 @@ export class McpServerStore {
     scope: McpServerScope,
     name: string,
     config: string,
-    enabled: boolean,
+    flags: { enabled: boolean; ui: boolean },
     deleted: boolean,
     author: string,
   ): McpServerRecord {
@@ -252,8 +291,8 @@ export class McpServerStore {
       .get(name) as { v: number };
     const row = this.db
       .prepare(
-        `INSERT INTO mcp_server_versions (name, version, agent, desk, config, enabled, deleted, created_at, author)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+        `INSERT INTO mcp_server_versions (name, version, agent, desk, config, enabled, ui, deleted, created_at, author)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       )
       .get(
         name,
@@ -261,7 +300,8 @@ export class McpServerStore {
         scope.agent,
         scope.desk,
         config,
-        enabled ? 1 : 0,
+        flags.enabled ? 1 : 0,
+        flags.ui ? 1 : 0,
         deleted ? 1 : 0,
         new Date().toISOString(),
         author,

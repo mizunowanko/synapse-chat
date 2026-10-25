@@ -114,7 +114,7 @@ Per-CLI delivery and how the replaced files are kept out: [`docs/design/instruct
 
 ## MCP server ledger (`@synapse-chat/mcp/mcp-servers`, `synapse-mcp-servers`)
 
-The MCP servers an agent's sessions get, kept provider-neutral in the same SQLite file, in the skills' tiers (everyone → agent → desk; the lower tier wins a name, `enabled: false` switches a server off for that tier). Every write is a new version; removing leaves a tombstone. Secrets stay out of the DB: any value may say `${NAME}`, expanded at launch from the environment you pass (a missing variable skips that server and says which variable).
+The MCP servers an agent's sessions get, kept provider-neutral in the same SQLite file, in the skills' tiers (everyone → agent → desk; the lower tier wins a name, `enabled: false` switches a server off for that tier). Every write is a new version; removing leaves a tombstone. Secrets stay out of the DB: any value may say `${NAME}`, expanded at launch from the environment you pass (a missing variable skips that server and says which variable). A server that has a UI (an MCP App) carries `"ui": true` (or `put --ui`): the launch is the same, and the app finds those servers with `McpServerStore.listApps()` / `McpServerRecord.ui` (`list --ui` on the CLI).
 
 ```bash
 cat > artiflow.json <<'JSON'
@@ -125,6 +125,8 @@ synapse-mcp-servers put artiflow.json --agent Homura --db /abs/skills.db
 synapse-mcp-servers list --effective --agent Homura --desk-id <desk id> --desk artiflow --db /abs/skills.db
 synapse-mcp-servers launch codex --agent Homura --db /abs/skills.db   # what Codex would get (secrets expanded)
 synapse-mcp-servers history artiflow --db /abs/skills.db
+synapse-mcp-servers put cards.json --global --ui --db /abs/skills.db   # an MCP App (a server with a UI)
+synapse-mcp-servers list --ui --db /abs/skills.db
 ```
 
 ```ts
