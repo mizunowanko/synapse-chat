@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.9.0
+
+### Minor Changes
+
+- MCP サーバーの台帳の行に「UI を持つ」（MCP App）の印 `ui` を足す。`put` の JSON の `"ui": true` か `put --ui` で書き、`McpServerRecord.ui`・`McpServerStore.listApps()`・`list --ui` で読む。列を足すだけで、スキーマの版は 1 のまま（旧い版も同じファイルを開ける）。起動時の渡し方は変わらない（agents-familia agt-224）
+
 ## 0.8.0
 
 ### Minor Changes

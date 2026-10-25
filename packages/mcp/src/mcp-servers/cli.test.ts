@@ -99,6 +99,36 @@ describe("synapse-mcp-servers", () => {
     expect(text().trim().split("\n").map((l) => l.split("\t").slice(0, 2).join(" "))).toEqual(["v1 live", "v2 deleted"]);
   });
 
+  it("marks a server that has a UI: in the file or with --ui; show round-trips it, list --ui lists only those", async () => {
+    const app = { name: "cards", transport: "http", url: "https://apps/mcp" };
+    await run("put", write("app.json", app), "--global", "--ui", "--dry-run");
+    expect(text()).toContain("would put cards (http, on, ui) → 全員");
+    await run("put", write("app.json", app), "--global", "--ui");
+    await run("put", write("app2.json", { ...app, ui: true }), "--agent", "Homura");
+    await run("put", write("a.json", artiflow), "--agent", "Homura");
+
+    output = [];
+    await run("list", "--ui");
+    expect(text().trim().split("\n").map((l) => l.split("\t").slice(0, 6).join(" "))).toEqual([
+      "全員 cards v1 http on ui",
+      "エージェント Homura cards v2 http on ui",
+    ]);
+    output = [];
+    await run("list", "--effective", "--agent", "Homura", "--ui");
+    expect(text().trim().split("\n").map((l) => l.split("\t").slice(0, 2).join(" "))).toEqual(["エージェント Homura cards"]);
+
+    output = [];
+    await run("show", "cards");
+    const shown = JSON.parse(text()) as Record<string, unknown>;
+    expect(shown).toEqual({ ...app, enabled: true, ui: true });
+    output = [];
+    await run("put", write("back.json", shown), "--global");
+    expect(text()).toContain("unchanged cards");
+    output = [];
+    await run("show", "artiflow", "--agent", "Homura");
+    expect(JSON.parse(text())).not.toHaveProperty("ui");
+  });
+
   it("--desk-id keys the desk tier, and --effective / launch read --desk beneath it (agt-215)", async () => {
     await run("put", write("old.json", { name: "y", transport: "http", url: "https://by-name" }), "--agent", "Homura", "--desk", "main");
     await run("put", write("new.json", { name: "z", transport: "http", url: "https://by-id" }), "--agent", "Homura", "--desk-id", "desk-1", "--desk", "main");

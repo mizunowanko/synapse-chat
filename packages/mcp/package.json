@@ -1,6 +1,6 @@
 {
   "name": "@mizunowanko/synapse-chat-mcp",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "MCP (Model Context Protocol) helpers for synapse-chat: declarative HTTP → MCP tool proxies, stdio server scaffold, Claude Code / Gemini CLI settings generators, and a skills server that hands SQLite-stored skills to Claude Code / Codex / agy, and an instruction store that hands two-tier (everyone / agent) instructions to the same CLIs at launch, and an MCP server ledger (everyone / agent / desk) that hands the same servers to each CLI in its own form, and a peers server that lets one CLI session message the app's other sessions through two HTTP endpoints the app implements.",
   "license": "MIT",
   "type": "module",

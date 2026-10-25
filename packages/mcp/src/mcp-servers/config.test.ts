@@ -55,6 +55,14 @@ describe("parseMcpServerConfig", () => {
     expect(parseMcpServerSpec({ name: "a", transport: "http", url: "https://h" }).enabled).toBe(true);
     expect(() => parseMcpServerSpec({ name: "a", enabled: "no", transport: "http", url: "https://h" })).toThrow(/enabled/);
   });
+
+  it("takes ui as a boolean, default false", () => {
+    expect(parseMcpServerSpec({ name: "a", transport: "http", url: "https://h" }).ui).toBe(false);
+    expect(parseMcpServerSpec({ name: "a", ui: true, transport: "http", url: "https://h" })).toEqual({
+      name: "a", enabled: true, ui: true, transport: "http", url: "https://h",
+    });
+    expect(() => parseMcpServerSpec({ name: "a", ui: "yes", transport: "http", url: "https://h" })).toThrow(/ui must be/);
+  });
 });
 
 describe("expandMcpServerConfig", () => {
