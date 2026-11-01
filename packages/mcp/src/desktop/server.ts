@@ -25,15 +25,18 @@ import type {
   DesktopAccessState,
   DesktopAppRequest,
   DesktopRefusal,
+  HelperAxNode,
+  HelperAxTree,
   HelperResolvedApp,
   HelperResponse,
   HelperScreenshot,
+  HelperWindow,
 } from "./contract.js";
 import type { HelperClient } from "./helper-client.js";
 import { isBrowser, toPixel, toPoint, toPointRect, type ScreenGeometry } from "./policy.js";
 
 export const DESKTOP_SERVER_NAME = "desktop";
-export const DESKTOP_SERVER_VERSION = "1";
+export const DESKTOP_SERVER_VERSION = "2";
 
 /** The long edge Claude reads without downscaling; the helper fits screenshots inside it. */
 export const DEFAULT_SCREENSHOT_MAX = 1456;
@@ -62,10 +65,13 @@ export interface DesktopServerHandle {
 }
 
 export const DESKTOP_INSTRUCTIONS =
-  "このサーバーは macOS のデスクトップのアプリを見て操作する。" +
+  "このサーバーは macOS のアプリを、人の画面を奪わずに裏で見て操作する。" +
   "最初に request_access で使うアプリと理由を伝え、人の承認を待つ（status が pending なら、同じ引数でもう一度呼ぶ）。" +
-  "スクリーンショットに写るのは承認されたアプリのウィンドウだけで、操作できるのもそれだけ。ブラウザは見るだけで、クリックもキー入力もできない。" +
-  "座標は直前の screenshot の画素で指定する（zoom の画像の画素ではない）。操作のあとは screenshot で結果を確かめる。" +
+  "見えるのも操作できるのも承認されたアプリだけ。ブラウザは見るだけで、クリック・キー入力・AX の操作はできない。" +
+  "基本の流れ: screenshot で承認されたアプリのウィンドウを 1 枚撮る（ほかのウィンドウの裏・別の操作スペース・別のディスプレイにあっても撮れる。複数あれば list_windows を見て window で選ぶ）→ " +
+  "ax_tree でボタンや入力欄と ref を読む → ax_press / ax_set_value / ax_perform で ref を操作する → ax_tree か screenshot で結果を確かめる。" +
+  "AX で届かないときは left_click・key・type を使う。直前の screenshot がウィンドウなら、座標はその画像の画素で、イベントはそのアプリにだけ届き、ポインタは動かず前面にも出ない。" +
+  "open_application と screenshot の mode: \"screen\" は人の画面を切り替える前面の操作なので、裏の操作で足りないときだけ使う。" +
   "ユーザーが Esc を押すと止まり、以後のツールは aborted を返す。そのときは作業をやめ、ユーザーに確かめてから request_access し直す。";
 
 const coordinate = {
@@ -73,7 +79,13 @@ const coordinate = {
   items: { type: "number" },
   minItems: 2,
   maxItems: 2,
-  description: "[x, y]: 直前の screenshot の画素",
+  description: "[x, y]: 直前の screenshot（ウィンドウならその画像）の画素",
+} as const;
+
+const ref = { type: "string", description: "ax_tree が返した要素の ref（e12 など）" } as const;
+const windowSelector = {
+  type: ["integer", "string"],
+  description: "list_windows の id、またはウィンドウのタイトル・アプリ名の一部（省くと直前のウィンドウか、承認されたアプリの最初のウィンドウ）",
 } as const;
 
 // Input tools: destructiveHint / openWorldHint false so a non-interactive
@@ -85,7 +97,9 @@ const READ = { readOnlyHint: true, idempotentHint: true, openWorldHint: false } 
 function clickTool(name: string, what: string): Tool {
   return {
     name,
-    description: `${what}。押しているあいだ保持する修飾キーを text に書ける（"shift"、"cmd+shift"）。`,
+    description:
+      `${what}。直前の screenshot がウィンドウなら、そのアプリにだけ裏で送る（ポインタは動かず、前面にも出ない）。` +
+      `ボタンなどは ax_press のほうが確実。押しているあいだ保持する修飾キーを text に書ける（"shift"、"cmd+shift"）。`,
     inputSchema: {
       type: "object",
       properties: { coordinate, text: { type: "string", description: "保持する修飾キー（任意）" } },
@@ -121,10 +135,74 @@ export const DESKTOP_TOOLS: readonly Tool[] = [
     annotations: { title: "List granted applications", ...READ },
   },
   {
-    name: "screenshot",
-    description: "画面（メインディスプレイ）を撮る。承認されたアプリのウィンドウだけが写り、ほかは写らない。以後の座標はこの画像の画素。",
+    name: "list_windows",
+    description:
+      "承認されたアプリのウィンドウを、どこにあっても（裏・別の操作スペース・別のディスプレイ・最小化）挙げる。id・タイトル・位置と大きさ（ポイント）・capturable（最小化と隠したものは撮れない）。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { title: "List windows", ...READ },
+  },
+  {
+    name: "screenshot",
+    description:
+      "承認されたアプリのウィンドウを 1 枚だけ撮る（既定）。ほかのウィンドウの裏・別の操作スペース・別のディスプレイにあっても、人の画面を変えずに撮れる。" +
+      "以後の座標はこの画像の画素で、クリックやキーはこのウィンドウのアプリに裏で届く。" +
+      "mode: \"screen\" はメインディスプレイ全体を撮る前面の方法（承認されたアプリのウィンドウだけが写る。いまの操作スペースに出ていないと no-window）。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        window: windowSelector,
+        mode: { type: "string", enum: ["window", "screen"], description: "既定 window" },
+      },
+      additionalProperties: false,
+    },
     annotations: { title: "Screenshot", readOnlyHint: true, idempotentHint: false, openWorldHint: false },
+  },
+  {
+    name: "ax_tree",
+    description:
+      "ウィンドウのアクセシビリティの木を読む（アプリを前に出さない）。各行は [ref] 役割 \"タイトル\" 値 actions と、ウィンドウの画像での位置 @x,y 幅x高さ（画素）。" +
+      "ref を ax_press / ax_set_value / ax_perform に渡す。ref は読み直しても同じ要素なら同じ。scope: \"menubar\" でメニューバーを読む（メニュー項目も ax_press で選べる）。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        window: windowSelector,
+        scope: { type: "string", enum: ["window", "menubar"], description: "既定 window" },
+        max_depth: { type: "integer", minimum: 1, maximum: 60, description: "既定 25" },
+        max_nodes: { type: "integer", minimum: 1, maximum: 2000, description: "既定 400" },
+        all: { type: "boolean", description: "何も言わない入れ物（AXGroup など）も出す。既定 false" },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: "Accessibility tree", ...READ, idempotentHint: false },
+  },
+  {
+    name: "ax_press",
+    description: "ref の要素を押す（AXPress）。ボタン・チェックボックス・メニュー項目など。アプリを前に出さず、ポインタも動かさない。",
+    inputSchema: { type: "object", properties: { ref }, required: ["ref"], additionalProperties: false },
+    annotations: { title: "AX press", ...INPUT },
+  },
+  {
+    name: "ax_set_value",
+    description: "ref の要素の値（AXValue）を書き換える。入力欄の文字、スライダーの数値など。アプリを前に出さない。",
+    inputSchema: {
+      type: "object",
+      properties: { ref, value: { type: ["string", "number"] } },
+      required: ["ref", "value"],
+      additionalProperties: false,
+    },
+    annotations: { title: "AX set value", ...INPUT },
+  },
+  {
+    name: "ax_perform",
+    description:
+      "ref の要素に、ax_tree の actions にあるアクションを送る（AXConfirm、AXIncrement、AXDecrement、AXShowMenu、AXCancel、AXPick など）。AXRaise は前面に出すので使えない。",
+    inputSchema: {
+      type: "object",
+      properties: { ref, action: { type: "string" } },
+      required: ["ref", "action"],
+      additionalProperties: false,
+    },
+    annotations: { title: "AX perform", ...INPUT },
   },
   clickTool("left_click", "左クリック"),
   clickTool("right_click", "右クリック"),
@@ -178,19 +256,22 @@ export const DESKTOP_TOOLS: readonly Tool[] = [
   {
     name: "key",
     description:
-      "キーを押す。修飾キーは + でつなぐ（\"cmd+shift+a\"、\"Return\"、\"ctrl+c\"、\"Escape\"、\"Page_Down\"、\"F5\"）。空白で区切ると順に押す。最前面のアプリに届く。",
+      "キーを押す。修飾キーは + でつなぐ（\"cmd+shift+a\"、\"Return\"、\"ctrl+c\"、\"Escape\"、\"Page_Down\"、\"F5\"）。空白で区切ると順に押す。" +
+      "直前の screenshot がウィンドウなら、そのアプリに裏で届く。mode: \"screen\" のあとは最前面のアプリに届く。",
     inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"], additionalProperties: false },
     annotations: { title: "Key", ...INPUT },
   },
   {
     name: "type",
-    description: "文字列を打つ（最前面のアプリに届く）。改行は Return になる。",
+    description:
+      "文字列を打つ。改行は Return になる。直前の screenshot がウィンドウなら、そのアプリに裏で届く（mode: \"screen\" のあとは最前面のアプリ）。入力欄なら ax_set_value のほうが確実。",
     inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"], additionalProperties: false },
     annotations: { title: "Type", ...INPUT },
   },
   {
     name: "open_application",
-    description: "承認されたアプリを開く（開いていれば前面に出す）。名前か bundle id。",
+    description:
+      "承認されたアプリを開いて前面に出す。人の画面（操作スペース）が切り替わるので、起動していないときや裏の操作で足りないときだけ使う。ウィンドウが出るまで最大 2 秒待つ。名前か bundle id。",
     inputSchema: { type: "object", properties: { app: { type: "string" } }, required: ["app"], additionalProperties: false },
     annotations: { title: "Open application", ...INPUT },
   },
@@ -214,7 +295,7 @@ export const DESKTOP_TOOLS: readonly Tool[] = [
   {
     name: "zoom",
     description:
-      "直前の screenshot の矩形 region [x0, y0, x1, y1]（画素）を高い解像度で撮り直す。細かい文字を読むため。座標の基準は変わらない（クリックは元の screenshot の画素で）。",
+      "直前の screenshot（ウィンドウならそのウィンドウ）の矩形 region [x0, y0, x1, y1]（画素）を高い解像度で撮り直す。細かい文字を読むため。座標の基準は変わらない（クリックは元の screenshot の画素で）。",
     inputSchema: {
       type: "object",
       properties: { region: { type: "array", items: { type: "number" }, minItems: 4, maxItems: 4 } },
@@ -291,7 +372,8 @@ export function createDesktopToolHandler(options: DesktopServerOptions) {
   let aborted = false;
   let expired = false;
   let sessionActive = false;
-  let geometry: ScreenGeometry | undefined;
+  /** The last screenshot (or ax_tree): coordinates are its pixels. With `window`, input goes to that window in the background. */
+  let geometry: (ScreenGeometry & { window?: HelperWindow }) | undefined;
   let pending: { requestId: string; key: string } | undefined;
 
   const log = (entry: Record<string, unknown>): void => {
@@ -370,6 +452,9 @@ export function createDesktopToolHandler(options: DesktopServerOptions) {
         sessionActive = false;
         g = guard(kind);
         continue;
+      }
+      if (r.reason === "bad-request" && /^unknown op/.test(r.error)) {
+        throw new Refused(refuse("helper-outdated", `The desktop helper is too old for ${op} (syn-7). Replace it with a current build (desktop-helper/build.sh) and restart it.`, { op }));
       }
       throw new Refused(stripOk(r));
     }
@@ -480,19 +565,150 @@ export function createDesktopToolHandler(options: DesktopServerOptions) {
     };
   }
 
-  async function screenshot(): Promise<CallToolResult> {
-    const g = guard("screen");
-    const s = await session<HelperScreenshot>("screenshot", shot, "screen");
-    geometry = { width: s.width, height: s.height, originX: s.originX, originY: s.originY, pointWidth: s.pointWidth, pointHeight: s.pointHeight };
-    const captured = new Set(s.apps);
-    const notVisible = g.apps.filter((a) => !captured.has(a.bundleId)).map((a) => a.bundleId);
-    return image(s, { width: s.width, height: s.height, apps: s.apps, ...(notVisible.length ? { notVisible } : {}) });
+  const brief = (w: HelperWindow) => ({
+    id: w.id,
+    app: w.app,
+    title: w.title,
+    ...(w.capturable ? {} : { capturable: false, ...(w.minimized ? { minimized: true } : {}), ...(w.hidden ? { hidden: true } : {}) }),
+  });
+
+  async function listWindows(): Promise<HelperWindow[]> {
+    return (await session<{ windows: HelperWindow[] }>("listWindows", {}, "screen")).windows;
   }
+
+  /** The window a selector names; without one, the last window, else the first capturable one of an app that takes input. */
+  async function pickWindow(sel: unknown): Promise<{ window: HelperWindow; windows: HelperWindow[] }> {
+    const g = guard("screen");
+    const windows = await listWindows();
+    if (sel !== undefined && sel !== null) {
+      let hits: HelperWindow[];
+      if (typeof sel === "number" && Number.isInteger(sel)) {
+        hits = windows.filter((w) => w.id === sel);
+      } else if (typeof sel === "string" && sel.trim() !== "") {
+        const q = sel.trim().toLowerCase();
+        hits = windows.filter(
+          (w) => String(w.id) === q || w.bundleId.toLowerCase() === q || w.app.toLowerCase() === q || w.title.toLowerCase().includes(q),
+        );
+      } else {
+        throw new Refused(refuse("bad-request", "window must be a window id or a part of its title / app name"));
+      }
+      const hit = hits.find((w) => w.capturable) ?? hits[0];
+      if (!hit) {
+        throw new Refused(refuse("no-window", `No window of the granted apps matches ${JSON.stringify(sel)}.`, { windows: windows.map(brief) }));
+      }
+      return { window: hit, windows };
+    }
+    const last = geometry?.window && windows.find((w) => w.id === geometry!.window!.id);
+    if (last) return { window: last, windows };
+    const input = new Set(g.apps.filter((a) => a.input).map((a) => a.bundleId));
+    const rank = (w: HelperWindow) => (w.capturable ? 2 : 0) + (input.has(w.bundleId) ? 1 : 0);
+    const best = [...windows].sort((a, b) => rank(b) - rank(a))[0];
+    if (!best) {
+      throw new Refused(
+        refuse("no-window", "The granted apps have no window (they may not be running). open_application starts one, but switches the user's screen to it.", {
+          apps: g.apps.map((a) => a.bundleId),
+        }),
+      );
+    }
+    return { window: best, windows };
+  }
+
+  async function screenshot(args: Record<string, unknown>): Promise<CallToolResult> {
+    const g = guard("screen");
+    const mode = args.mode ?? "window";
+    if (mode !== "window" && mode !== "screen") throw new Refused(refuse("bad-request", "mode must be window or screen"));
+    if (mode === "screen") {
+      if (args.window !== undefined) throw new Refused(refuse("bad-request", "window is for mode window"));
+      const s = await session<HelperScreenshot>("screenshot", shot, "screen");
+      geometry = { width: s.width, height: s.height, originX: s.originX, originY: s.originY, pointWidth: s.pointWidth, pointHeight: s.pointHeight };
+      const captured = new Set(s.apps);
+      const notVisible = g.apps.filter((a) => !captured.has(a.bundleId)).map((a) => a.bundleId);
+      return image(s, { mode: "screen", width: s.width, height: s.height, apps: s.apps, ...(notVisible.length ? { notVisible } : {}) });
+    }
+    const { window: w, windows } = await pickWindow(args.window);
+    const s = await session<HelperScreenshot>("screenshot", { ...shot, window: w.id }, "screen");
+    const win = s.window ?? w;
+    geometry = { width: s.width, height: s.height, originX: s.originX, originY: s.originY, pointWidth: s.pointWidth, pointHeight: s.pointHeight, window: win };
+    const others = windows.filter((o) => o.id !== win.id);
+    return image(s, {
+      mode: "window",
+      width: s.width,
+      height: s.height,
+      window: { ...brief(win), bundleId: win.bundleId, onScreen: win.onScreen },
+      ...(others.length ? { otherWindows: others.map(brief) } : {}),
+    });
+  }
+
+  /** Where input goes: the last screenshot's window (background), or the HID tap (foreground). */
+  const target = (): { window?: number } => (geometry?.window ? { window: geometry.window.id } : {});
 
   async function click(args: Record<string, unknown>, button: "left" | "right" | "middle", count: number) {
     const p = at(args.coordinate);
     const modifiers = typeof args.text === "string" && args.text.trim() !== "" ? args.text.split(/[+\s]+/).filter(Boolean) : [];
-    return session<Record<string, unknown>>("click", { ...p, button, count, modifiers }, "input");
+    return session<Record<string, unknown>>("click", { ...p, button, count, modifiers, ...target() }, "input");
+  }
+
+  function axLine(n: HelperAxNode, g: ScreenGeometry | undefined): string {
+    const parts = [`${"  ".repeat(n.depth)}[${n.ref}] ${n.role}${n.subrole ? `/${n.subrole}` : ""}`];
+    if (n.title) parts.push(JSON.stringify(n.title));
+    if (n.description && n.description !== n.title) parts.push(`(${n.description})`);
+    // Calculator & co. wrap numbers in bidi marks (U+200E): invisible, and they only get in the way.
+    if (n.value !== undefined) parts.push(`= ${JSON.stringify(typeof n.value === "string" ? n.value.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "") : n.value)}`);
+    if (n.identifier) parts.push(`#${n.identifier}`);
+    if (n.enabled === false) parts.push("disabled");
+    if (n.focused) parts.push("focused");
+    if (n.selected) parts.push("selected");
+    if (n.actions?.length) parts.push(`actions=${n.actions.map((a) => a.replace(/^AX/, "")).join(",")}`);
+    if (g && n.x !== undefined && n.y !== undefined && n.width !== undefined && n.height !== undefined) {
+      const p = toPixel(g, n.x, n.y);
+      parts.push(`@${p.x},${p.y} ${Math.round((n.width * g.width) / g.pointWidth)}x${Math.round((n.height * g.height) / g.pointHeight)}`);
+    }
+    return parts.join(" ");
+  }
+
+  async function axTree(args: Record<string, unknown>): Promise<CallToolResult> {
+    const scope = args.scope ?? "window";
+    if (scope !== "window" && scope !== "menubar") throw new Refused(refuse("bad-request", "scope must be window or menubar"));
+    const int = (v: unknown, name: string, max: number): number | undefined => {
+      if (v === undefined) return undefined;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > max) throw new Refused(refuse("bad-request", `${name} must be an integer 1-${max}`));
+      return v;
+    };
+    const maxDepth = int(args.max_depth, "max_depth", 60);
+    const maxNodes = int(args.max_nodes, "max_nodes", 2000);
+    const { window: w } = await pickWindow(args.window);
+    const t = await session<HelperAxTree>(
+      "axTree",
+      {
+        window: w.id,
+        scope,
+        maxWidth: shot.maxWidth,
+        maxHeight: shot.maxHeight,
+        ...(maxDepth ? { maxDepth } : {}),
+        ...(maxNodes ? { maxNodes } : {}),
+        ...(args.all === true ? { all: true } : {}),
+      },
+      "screen",
+    );
+    const win = t.window ?? w;
+    // Coordinates: the window's screenshot, the last one if it was this window, else where one would lie.
+    if (!(geometry?.window && geometry.window.id === win.id) && t.geometry) {
+      const { width, height, originX, originY, pointWidth, pointHeight } = t.geometry;
+      geometry = { width, height, originX, originY, pointWidth, pointHeight, window: win };
+    }
+    const g = geometry?.window?.id === win.id ? geometry : undefined;
+    const head = `window ${win.id} ${JSON.stringify(win.title)} (${win.app})${g ? ` ${g.width}x${g.height} px` : ""} scope=${t.scope}`;
+    const lines = t.nodes.map((n) => axLine(n, g));
+    const tail = t.truncated ? ["… truncated: raise max_nodes / max_depth, or read a smaller part"] : [];
+    return {
+      content: [{ type: "text", text: [head, ...lines, ...tail].join("\n") }],
+      structuredContent: { window: brief(win), scope: t.scope, count: t.nodes.length, truncated: t.truncated },
+    };
+  }
+
+  function axRef(v: unknown): string {
+    if (typeof v !== "string" || !/^e\d+$/.test(v)) throw new Refused(refuse("bad-request", "ref must be a ref from ax_tree (e12)"));
+    return v;
   }
 
   async function call(name: string, args: Record<string, unknown>): Promise<CallToolResult> {
@@ -504,7 +720,26 @@ export function createDesktopToolHandler(options: DesktopServerOptions) {
       case "list_granted_applications":
         return ok(grantView());
       case "screenshot":
-        return screenshot();
+        return screenshot(args);
+      case "list_windows": {
+        guard("screen");
+        const windows = await listWindows();
+        return ok({ windows });
+      }
+      case "ax_tree":
+        return axTree(args);
+      case "ax_press":
+        return ok(await session("axAction", { ref: axRef(args.ref), action: "AXPress" }, "input"));
+      case "ax_perform": {
+        const action = str(args.action, "action").trim();
+        const name = action.startsWith("AX") ? action : `AX${action}`;
+        return ok(await session("axAction", { ref: axRef(args.ref), action: name }, "input"));
+      }
+      case "ax_set_value": {
+        const v = args.value;
+        if (typeof v !== "string" && !(typeof v === "number" && Number.isFinite(v))) throw new Refused(refuse("bad-request", "value must be a string or a number"));
+        return ok(await session("axSetValue", { ref: axRef(args.ref), value: v }, "input"));
+      }
       case "left_click":
         return ok(await click(args, "left", 1));
       case "right_click":
@@ -516,16 +751,19 @@ export function createDesktopToolHandler(options: DesktopServerOptions) {
       case "triple_click":
         return ok(await click(args, "left", 3));
       case "mouse_move":
-        return ok(await session("move", at(args.coordinate), "input"));
+        return ok(await session("move", { ...at(args.coordinate), ...target() }, "input"));
       case "left_click_drag": {
         const from = at(args.start_coordinate, "start_coordinate");
         const to = at(args.coordinate);
-        return ok(await session("drag", { ...from, toX: to.x, toY: to.y, button: "left" }, "input"));
+        return ok(await session("drag", { ...from, toX: to.x, toY: to.y, button: "left", ...target() }, "input"));
       }
       case "left_mouse_down":
       case "left_mouse_up": {
+        if (args.coordinate === undefined && geometry?.window) {
+          throw new Refused(refuse("bad-request", "coordinate is required after a window screenshot (the pointer is not moved in the background)"));
+        }
         const p = args.coordinate === undefined ? {} : at(args.coordinate);
-        return ok(await session(name === "left_mouse_down" ? "mouseDown" : "mouseUp", { ...p, button: "left" }, "input"));
+        return ok(await session(name === "left_mouse_down" ? "mouseDown" : "mouseUp", { ...p, button: "left", ...target() }, "input"));
       }
       case "scroll": {
         const p = at(args.coordinate);
@@ -537,14 +775,14 @@ export function createDesktopToolHandler(options: DesktopServerOptions) {
         if (!Number.isInteger(amount) || amount < 1 || amount > 50) throw new Refused(refuse("bad-request", "scroll_amount must be an integer 1-50"));
         const dy = dir === "up" ? amount : dir === "down" ? -amount : 0;
         const dx = dir === "left" ? amount : dir === "right" ? -amount : 0;
-        return ok(await session("scroll", { ...p, dx, dy }, "input"));
+        return ok(await session("scroll", { ...p, dx, dy, ...target() }, "input"));
       }
       case "key":
-        return ok(await session("key", { keys: str(args.text, "text") }, "input"));
+        return ok(await session("key", { keys: str(args.text, "text"), ...target() }, "input"));
       case "type": {
         if (typeof args.text !== "string" || args.text === "") throw new Refused(refuse("bad-request", "text is required"));
         const text = args.text;
-        return ok(await session("type", { text }, "input", 30_000 + text.length * 50));
+        return ok(await session("type", { text, ...target() }, "input", 30_000 + text.length * 50));
       }
       case "open_application": {
         const q = str(args.app, "app").trim().toLowerCase();
@@ -572,7 +810,7 @@ export function createDesktopToolHandler(options: DesktopServerOptions) {
           if (e instanceof Refused) throw e;
           throw new Refused(refuse("bad-request", (e as Error).message));
         }
-        const s = await session<HelperScreenshot>("screenshot", { ...shot, region }, "screen");
+        const s = await session<HelperScreenshot>("screenshot", { ...shot, region, ...target() }, "screen");
         return image(s, { width: s.width, height: s.height, region: args.region, note: "Coordinates stay in the last screenshot's pixels." });
       }
       default:
@@ -586,7 +824,12 @@ export function createDesktopToolHandler(options: DesktopServerOptions) {
     sessionId,
     async call(name: string, args: Record<string, unknown>): Promise<CallToolResult> {
       // What is logged: the tool, the outcome, and sizes; never an image or typed text.
-      const extra = name === "type" && typeof args.text === "string" ? { length: args.text.length } : {};
+      const extra =
+        name === "type" && typeof args.text === "string"
+          ? { length: args.text.length }
+          : name === "ax_set_value"
+            ? { length: String(args.value ?? "").length }
+            : {};
       try {
         const r = await call(name, args);
         log({ event: "tools/call", tool: name, isError: r.isError === true, ...extra });

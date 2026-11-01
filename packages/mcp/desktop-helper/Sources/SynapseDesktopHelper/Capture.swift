@@ -1,14 +1,18 @@
-// Screenshots through ScreenCaptureKit, filtered to the allowed apps.
+// Screenshots of the main display through ScreenCaptureKit, filtered to the
+// allowed apps: the foreground fallback. The default since syn-7 is one
+// window at a time, wherever it is (Windows.swift).
 //
 // The filter is `SCContentFilter(display:including:)` with only the allowed
 // applications: every other window (and the wallpaper, the Dock, the menu
 // bar) is left out of the image by the window server, not blacked out
-// afterwards. The main display only (phase 1).
+// afterwards. The main display only.
 //
 // When none of the allowed apps has a window on screen there (another Space,
 // minimized, hidden, another display), the window server fails the capture
 // with SCStreamErrorDomain -3811 instead of returning an empty image, so that
-// case is refused up front as `no-window` (syn-6).
+// case is refused up front as `no-window` (syn-6). Right after an app is
+// activated its Space may still be sliding in: when an allowed app is
+// frontmost, the check waits up to 2 s for its window.
 import AppKit
 import CoreGraphics
 import ImageIO
@@ -44,12 +48,11 @@ enum Capture {
         guard CGPreflightScreenCaptureAccess() else {
             throw HelperError("permission", "Screen Recording is not granted to the desktop helper.", extra: ["permission": "screenRecording"])
         }
-        let content = try blocking { try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) }
+        var content = try blocking { try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) }
         let mainID = CGMainDisplayID()
         guard let display = content.displays.first(where: { $0.displayID == mainID }) ?? content.displays.first else {
             throw HelperError("no-display", "No display to capture.")
         }
-        let included = content.applications.filter { apps.contains($0.bundleIdentifier) }
 
         let bounds = CGDisplayBounds(display.displayID)  // global points
         var src = CGRect(origin: .zero, size: bounds.size)  // display-local points
@@ -60,27 +63,32 @@ enum Capture {
             }
         }
         // SCWindow.frame is in global points, like CGDisplayBounds.
-        let visible = content.windows.filter { w in
-            guard let bid = w.owningApplication?.bundleIdentifier, apps.contains(bid), w.isOnScreen else { return false }
-            return w.frame.intersects(bounds)
+        func visible(_ c: SCShareableContent) -> [SCWindow] {
+            c.windows.filter { w in
+                guard let bid = w.owningApplication?.bundleIdentifier, apps.contains(bid), w.isOnScreen else { return false }
+                return w.frame.intersects(bounds)
+            }
         }
-        if visible.isEmpty {
+        if visible(content).isEmpty, let front = Apps.frontmost(), let bid = front.bundleIdentifier, apps.contains(bid) {
+            // Just activated (open_application): the Space switch takes a moment.
+            if Windows.waitOnScreen(pid: front.processIdentifier, timeout: 2) {
+                content = try blocking { try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) }
+            }
+        }
+        if visible(content).isEmpty {
             throw HelperError(
                 "no-window",
-                "None of the allowed apps (\(apps.sorted().joined(separator: ", "))) has a window on the main display right now: it may be on another Space, minimized, hidden or on another display. Bring it to the front (e.g. open_application) and take the screenshot again.",
+                "None of the allowed apps (\(apps.sorted().joined(separator: ", "))) has a window on the main display right now: it may be on another Space, minimized, hidden or on another display. Capture its window instead (screenshot without mode \"screen\"; list_windows), which works in the background.",
                 extra: ["apps": apps.sorted()])
         }
+        let included = content.applications.filter { apps.contains($0.bundleIdentifier) }
         let filter = SCContentFilter(display: display, including: included, exceptingWindows: [])
         let backing = Double(filter.pointPixelScale)
-        let nativeW = Double(src.width) * backing
-        let nativeH = Double(src.height) * backing
-        let fit = min(1.0, Double(max(o.maxWidth, 1)) / nativeW, Double(max(o.maxHeight, 1)) / nativeH)
-        let width = max(1, Int((nativeW * fit).rounded()))
-        let height = max(1, Int((nativeH * fit).rounded()))
+        let size = Windows.fit(src.size, backing: backing, maxWidth: o.maxWidth, maxHeight: o.maxHeight)
 
         let config = SCStreamConfiguration()
-        config.width = width
-        config.height = height
+        config.width = size.width
+        config.height = size.height
         config.sourceRect = src
         config.showsCursor = false
         config.capturesAudio = false
@@ -93,6 +101,19 @@ enum Capture {
             throw HelperError("capture-failed", "ScreenCaptureKit could not take the screenshot (\(e.domain) \(e.code)). Make sure an allowed app's window is on screen on the main display and try again.", extra: ["code": e.code])
         }
 
+        var out = try encode(image, options: o)
+        // The captured rectangle in global points: pixel (x, y) is the
+        // point (originX + x * pointWidth / width, originY + y * pointHeight / height).
+        out["originX"] = Double(bounds.minX + src.minX)
+        out["originY"] = Double(bounds.minY + src.minY)
+        out["pointWidth"] = Double(src.width)
+        out["pointHeight"] = Double(src.height)
+        out["backingScale"] = backing
+        out["apps"] = included.map { $0.bundleIdentifier }
+        return out
+    }
+
+    static func encode(_ image: CGImage, options o: Options) throws -> JSON {
         let jpeg = o.format == "jpeg"
         let data = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(data, (jpeg ? UTType.jpeg : UTType.png).identifier as CFString, 1, nil) else {
@@ -107,14 +128,6 @@ enum Capture {
             "mimeType": jpeg ? "image/jpeg" : "image/png",
             "width": image.width,
             "height": image.height,
-            // The captured rectangle in global points: pixel (x, y) is the
-            // point (originX + x * pointWidth / width, originY + y * pointHeight / height).
-            "originX": Double(bounds.minX + src.minX),
-            "originY": Double(bounds.minY + src.minY),
-            "pointWidth": Double(src.width),
-            "pointHeight": Double(src.height),
-            "backingScale": backing,
-            "apps": included.map { $0.bundleIdentifier },
         ]
     }
 }

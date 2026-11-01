@@ -70,6 +70,8 @@ export type DesktopLocalReason =
   | "server-unreachable"
   /** The helper is not running and could not be started. */
   | "helper-unavailable"
+  /** The helper does not know an op this server needs (built before syn-7). */
+  | "helper-outdated"
   /** No grant yet: call request_access. */
   | "no-access"
   /** The grant's expiresAt has passed. */
@@ -84,6 +86,8 @@ export type DesktopLocalReason =
   | "unknown-app"
   /** Click coordinates before any screenshot, or outside it. */
   | "no-screenshot"
+  /** No capturable window of the granted apps (or none matching the selector). */
+  | "no-window"
   | "bad-request";
 
 // ---------------------------------------------------------------------------
@@ -132,6 +136,59 @@ export interface HelperScreenshot {
   readonly backingScale: number;
   /** The bundle ids whose windows were captured (granted and running). */
   readonly apps: readonly string[];
+  /** Window mode (syn-7): the window captured; the geometry is its frame. */
+  readonly window?: HelperWindow;
+}
+
+/** One window of an allowed app, wherever it is (`listWindows`). Bounds in global points. */
+export interface HelperWindow {
+  readonly id: number;
+  readonly pid: number;
+  readonly bundleId: string;
+  readonly app: string;
+  readonly title: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  /** On the current Space of its display (and not covered-by-minimize). Off-screen windows are still captured. */
+  readonly onScreen: boolean;
+  readonly minimized: boolean;
+  readonly hidden: boolean;
+  /** False when minimized or hidden: macOS cannot capture it in the background. */
+  readonly capturable: boolean;
+  readonly display?: number;
+  readonly mainDisplay?: boolean;
+}
+
+/** One element of an `axTree`; the frame is in global points. */
+export interface HelperAxNode {
+  readonly ref: string;
+  readonly role: string;
+  readonly depth: number;
+  readonly subrole?: string;
+  readonly title?: string;
+  readonly description?: string;
+  readonly identifier?: string;
+  readonly help?: string;
+  readonly value?: string | number | boolean;
+  readonly enabled?: false;
+  readonly focused?: true;
+  readonly selected?: true;
+  readonly actions?: readonly string[];
+  readonly x?: number;
+  readonly y?: number;
+  readonly width?: number;
+  readonly height?: number;
+}
+
+export interface HelperAxTree {
+  readonly nodes: readonly HelperAxNode[];
+  readonly truncated: boolean;
+  readonly scope: string;
+  readonly window?: HelperWindow;
+  /** Where a screenshot of `window` would lie (same numbers as one). */
+  readonly geometry?: Pick<HelperScreenshot, "width" | "height" | "originX" | "originY" | "pointWidth" | "pointHeight" | "backingScale">;
 }
 
 /** The default socket, under the user's Application Support. */

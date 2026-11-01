@@ -39,6 +39,37 @@ interface FakeHelper {
 /** The screen: 1000x500 pixels covering 2000x1000 points at (100, 50). */
 const SHOT = { data: "aW1n", mimeType: "image/jpeg", width: 1000, height: 500, originX: 100, originY: 50, pointWidth: 2000, pointHeight: 1000, backingScale: 2 };
 
+/** The granted apps' windows, wherever they are. TextEdit's main window lies exactly where SHOT does. */
+const win = (id: number, bundleId: string, title: string, x: number, y: number, width: number, height: number, extra: Record<string, unknown> = {}) => ({
+  id,
+  pid: 500 + id,
+  bundleId,
+  app: Object.values(INSTALLED).find((a) => a.bundleId === bundleId)!.name,
+  title,
+  x,
+  y,
+  width,
+  height,
+  onScreen: false,
+  minimized: false,
+  hidden: false,
+  capturable: true,
+  ...extra,
+});
+const WINDOWS = [
+  win(11, "com.apple.TextEdit", "メモ.txt", 100, 50, 2000, 1000),
+  win(12, "com.apple.TextEdit", "別の書類", 0, -1080, 800, 600, { onScreen: true, display: 3 }),
+  win(21, "com.apple.Notes", "メモ", 0, 0, 600, 400, { minimized: true, capturable: false }),
+  win(31, "com.apple.Safari", "ページ", 0, 0, 1200, 800),
+];
+
+/** An AX tree in global points: the window, a button at points (300, 250) 200x100, a field. */
+const AX_NODES = [
+  { ref: "e1", role: "AXWindow", depth: 0, title: "メモ.txt", x: 100, y: 50, width: 2000, height: 1000 },
+  { ref: "e2", role: "AXButton", depth: 1, title: "保存", actions: ["AXPress"], x: 300, y: 250, width: 200, height: 100 },
+  { ref: "e3", role: "AXTextField", depth: 1, value: "\u200eabc", actions: ["AXConfirm"], x: 100, y: 450, width: 400, height: 50 },
+];
+
 async function startFakeHelper(socketPath: string): Promise<FakeHelper> {
   const conns = new Set<net.Socket>();
   const owners = new Map<string, net.Socket>();
@@ -87,7 +118,35 @@ async function startFakeHelper(socketPath: string): Promise<FakeHelper> {
         return { ok: true, result: {} };
       default:
         if (h.holder !== session) return { ok: false, reason: "no-session", error: "No session." };
+        if (req.op === "listWindows") return { ok: true, result: { windows: WINDOWS.filter((w) => allowed.apps.includes(w.bundleId)) } };
+        if (req.op === "screenshot" && req.window !== undefined) {
+          const w = WINDOWS.find((x) => x.id === req.window)!;
+          if (!w.capturable) return { ok: false, reason: "minimized", error: "minimized" };
+          const scale = SHOT.width / SHOT.pointWidth;
+          return {
+            ok: true,
+            result: { ...SHOT, width: w.width * scale, height: w.height * scale, originX: w.x, originY: w.y, pointWidth: w.width, pointHeight: w.height, apps: [w.bundleId], window: w },
+          };
+        }
         if (req.op === "screenshot") return { ok: true, result: { ...SHOT, apps: allowed.apps.filter((a) => a !== "com.apple.Notes") } };
+        if (req.op === "axTree") {
+          const w = WINDOWS.find((x) => x.id === req.window)!;
+          const scale = SHOT.width / SHOT.pointWidth;
+          return {
+            ok: true,
+            result: {
+              nodes: AX_NODES,
+              truncated: false,
+              scope: req.scope,
+              window: w,
+              geometry: { width: w.width * scale, height: w.height * scale, originX: w.x, originY: w.y, pointWidth: w.width, pointHeight: w.height, backingScale: 2 },
+            },
+          };
+        }
+        if (req.op === "axAction" || req.op === "axSetValue") {
+          if (!allowed.inputApps.includes("com.apple.TextEdit")) return { ok: false, reason: "not-allowed", error: "not allowed" };
+          return { ok: true, result: { ref: req.ref, app: { bundleId: "com.apple.TextEdit" }, element: { role: "AXButton" } } };
+        }
         if (req.op === "cursor") return { ok: true, result: { x: 1100, y: 550 } };
         return { ok: true, result: { app: { bundleId: allowed.inputApps[0] } } };
     }
@@ -223,6 +282,10 @@ describe("tools/list", () => {
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
       [
+        "ax_perform",
+        "ax_press",
+        "ax_set_value",
+        "ax_tree",
         "cursor_position",
         "double_click",
         "key",
@@ -231,6 +294,7 @@ describe("tools/list", () => {
         "left_mouse_down",
         "left_mouse_up",
         "list_granted_applications",
+        "list_windows",
         "middle_click",
         "mouse_move",
         "open_application",
@@ -247,6 +311,11 @@ describe("tools/list", () => {
     const left = tools.find((t) => t.name === "left_click")!;
     expect(left.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: false });
     expect(tools.find((t) => t.name === "screenshot")!.annotations).toMatchObject({ readOnlyHint: true });
+    expect(tools.find((t) => t.name === "ax_tree")!.annotations).toMatchObject({ readOnlyHint: true });
+    expect(tools.find((t) => t.name === "ax_press")!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    // The background path is the documented one.
+    expect(DESKTOP_INSTRUCTIONS).toMatch(/裏/);
+    expect(DESKTOP_INSTRUCTIONS).toMatch(/ax_tree/);
     expect(mcp.getInstructions()).toBe(DESKTOP_INSTRUCTIONS);
     expect(DESKTOP_INSTRUCTIONS).not.toMatch(/familia|Desk/);
   });
@@ -391,11 +460,16 @@ describe("browsers are screenshot-only", () => {
       ["key", { text: "cmd+l" }],
       ["type", { text: "x" }],
       ["scroll", { coordinate: [10, 10], scroll_direction: "down" }],
+      ["ax_press", { ref: "e2" }],
+      ["ax_set_value", { ref: "e3", value: "x" }],
+      ["ax_perform", { ref: "e2", action: "AXShowMenu" }],
     ] as const) {
       const r = await call(tool, args);
       expect(r.structured?.reason).toBe("read-only");
     }
-    expect(ops("click").concat(ops("key"), ops("type"), ops("scroll"))).toHaveLength(0);
+    expect(ops("click").concat(ops("key"), ops("type"), ops("scroll"), ops("axAction"), ops("axSetValue"))).toHaveLength(0);
+    // Reading is fine: a window screenshot and the AX tree.
+    expect((await call("ax_tree")).isError).toBe(false);
   });
 
   it("with a browser and another app, the helper's not-allowed (the browser under the point) reaches the model", async () => {
@@ -421,12 +495,13 @@ describe("coordinates: screenshot pixels to points", () => {
     expect((await call("left_click", { coordinate: [10, 10] })).structured?.reason).toBe("no-screenshot");
   });
 
-  it("returns the screenshot as image content, and converts with its scale and origin", async () => {
+  it("mode screen (the foreground fallback): image content, converts with its scale and origin, events through the HID tap", async () => {
     const { call } = await granted1();
-    const shot = await call("screenshot");
+    const shot = await call("screenshot", { mode: "screen" });
     expect(shot.images).toEqual([{ data: SHOT.data, mimeType: "image/jpeg" }]);
-    expect(JSON.parse(shot.text)).toMatchObject({ width: 1000, height: 500, apps: ["com.apple.TextEdit"] });
+    expect(JSON.parse(shot.text)).toMatchObject({ mode: "screen", width: 1000, height: 500, apps: ["com.apple.TextEdit"] });
     expect(ops("screenshot")[0]).toMatchObject({ maxWidth: 1456, maxHeight: 1456, format: "jpeg" });
+    expect(ops("screenshot")[0]!.window).toBeUndefined();
 
     await call("left_click", { coordinate: [10, 20] });
     expect(ops("click")[0]).toMatchObject({ x: 120, y: 90, button: "left", count: 1, modifiers: [] });
@@ -447,11 +522,14 @@ describe("coordinates: screenshot pixels to points", () => {
       { dx: 3, dy: 0 },
     ]);
     expect((await call("cursor_position")).structured).toEqual({ x: 500, y: 250 });
+    for (const op of ["click", "drag", "scroll"]) for (const r of ops(op)) expect(r.window).toBeUndefined();
+    await call("key", { text: "a" });
+    expect(ops("key")[0]!.window).toBeUndefined();
   });
 
   it("refuses a point outside the screenshot", async () => {
     const { call } = await granted1();
-    await call("screenshot");
+    await call("screenshot", { mode: "screen" });
     for (const c of [[1000, 0], [-1, 0], [0, 500], ["a", 1], [1]]) {
       expect((await call("left_click", { coordinate: c })).structured?.reason).toBe("bad-request");
     }
@@ -460,7 +538,7 @@ describe("coordinates: screenshot pixels to points", () => {
 
   it("zoom asks for the region in points and leaves the coordinate space alone", async () => {
     const { call } = await granted1();
-    await call("screenshot");
+    await call("screenshot", { mode: "screen" });
     const z = await call("zoom", { region: [100, 50, 300, 150] });
     expect(z.images).toHaveLength(1);
     expect(ops("screenshot")[1]).toMatchObject({ region: { x: 300, y: 150, width: 400, height: 200 } });
@@ -472,7 +550,138 @@ describe("coordinates: screenshot pixels to points", () => {
     polls = [granted(["com.apple.TextEdit", "com.apple.Notes"])];
     const { call } = await connect();
     await call("request_access", { apps: ["TextEdit", "Notes"], reason: "r" });
-    expect(JSON.parse((await call("screenshot")).text)).toMatchObject({ notVisible: ["com.apple.Notes"] });
+    expect(JSON.parse((await call("screenshot", { mode: "screen" })).text)).toMatchObject({ notVisible: ["com.apple.Notes"] });
+  });
+});
+
+describe("the background path (syn-7): one window, AX, events to the app", () => {
+  async function granted1() {
+    const c = await connect();
+    await c.call("request_access", { apps: ["TextEdit"], reason: "r" });
+    return c;
+  }
+
+  it("list_windows names the granted apps' windows wherever they are", async () => {
+    polls = [granted(["com.apple.TextEdit", "com.apple.Notes"])];
+    const { call } = await connect();
+    await call("request_access", { apps: ["TextEdit", "Notes"], reason: "r" });
+    const r = await call("list_windows");
+    expect((r.structured?.windows as { id: number }[]).map((w) => w.id)).toEqual([11, 12, 21]);
+  });
+
+  it("screenshot captures one window by default, and input then goes to that window in the background", async () => {
+    const { call } = await granted1();
+    const shot = await call("screenshot");
+    expect(shot.images).toHaveLength(1);
+    const note = JSON.parse(shot.text);
+    expect(note).toMatchObject({ mode: "window", width: 1000, height: 500, window: { id: 11, title: "メモ.txt", bundleId: "com.apple.TextEdit" } });
+    expect(note.otherWindows).toEqual([{ id: 12, app: "TextEdit", title: "別の書類" }]);
+    expect(ops("screenshot")[0]).toMatchObject({ window: 11, maxWidth: 1456, format: "jpeg" });
+
+    await call("left_click", { coordinate: [10, 20] });
+    expect(ops("click")[0]).toMatchObject({ x: 120, y: 90, window: 11 });
+    await call("key", { text: "cmd+s" });
+    await call("type", { text: "x" });
+    await call("scroll", { coordinate: [1, 1], scroll_direction: "down" });
+    await call("left_click_drag", { start_coordinate: [0, 0], coordinate: [10, 10] });
+    expect([ops("key")[0], ops("type")[0], ops("scroll")[0], ops("drag")[0]]).toMatchObject([{ window: 11 }, { window: 11 }, { window: 11 }, { window: 11 }]);
+    expect((await call("left_mouse_down")).structured?.reason).toBe("bad-request");
+
+    await call("zoom", { region: [0, 0, 100, 50] });
+    expect(ops("screenshot")[1]).toMatchObject({ window: 11, region: { x: 100, y: 50, width: 200, height: 100 } });
+  });
+
+  it("selects a window by id or by a part of its title; the next screenshot stays on it", async () => {
+    const { call } = await granted1();
+    const r = await call("screenshot", { window: "別の" });
+    expect(JSON.parse(r.text)).toMatchObject({ width: 400, height: 300, window: { id: 12 } });
+    await call("left_click", { coordinate: [100, 100] });
+    // Window 12 at (0, -1080) on the other display, 800x600 points in 400x300 pixels.
+    expect(ops("click")[0]).toMatchObject({ x: 200, y: -880, window: 12 });
+    await call("screenshot");
+    expect(ops("screenshot")[1]).toMatchObject({ window: 12 });
+    await call("screenshot", { window: 11 });
+    expect(ops("screenshot")[2]).toMatchObject({ window: 11 });
+    const miss = await call("screenshot", { window: "nothing" });
+    expect(miss.structured).toMatchObject({ reason: "no-window", windows: [{ id: 11 }, { id: 12 }] });
+  });
+
+  it("a minimized window is passed over by default and refused when named", async () => {
+    polls = [granted(["com.apple.Notes"])];
+    const { call } = await connect();
+    await call("request_access", { apps: ["Notes"], reason: "r" });
+    expect((await call("screenshot")).structured?.reason).toBe("minimized");
+    expect((await call("list_windows")).structured?.windows).toMatchObject([{ id: 21, capturable: false }]);
+  });
+
+  it("ax_tree: one line per element with its ref, frames in the window image's pixels", async () => {
+    const { call } = await granted1();
+    const r = await call("ax_tree");
+    expect(r.isError).toBe(false);
+    expect(ops("axTree")[0]).toMatchObject({ window: 11, scope: "window", maxWidth: 1456, maxHeight: 1456 });
+    const lines = r.text.split("\n");
+    expect(lines[0]).toBe('window 11 "メモ.txt" (TextEdit) 1000x500 px scope=window');
+    expect(lines[1]).toBe('[e1] AXWindow "メモ.txt" @0,0 1000x500');
+    expect(lines[2]).toBe('  [e2] AXButton "保存" actions=Press @100,100 100x50');
+    expect(lines[3]).toBe('  [e3] AXTextField = "abc" actions=Confirm @0,200 200x25');
+    expect(r.structured).toMatchObject({ window: { id: 11 }, count: 3, truncated: false });
+    // ax_tree set the coordinates: a click on the button's pixels lands on its points, in the background.
+    await call("left_click", { coordinate: [150, 125] });
+    expect(ops("click")[0]).toMatchObject({ x: 400, y: 300, window: 11 });
+  });
+
+  it("ax_tree passes scope, limits and all; bad limits are refused", async () => {
+    const { call } = await granted1();
+    await call("ax_tree", { scope: "menubar", max_depth: 3, max_nodes: 50, all: true });
+    expect(ops("axTree")[0]).toMatchObject({ scope: "menubar", maxDepth: 3, maxNodes: 50, all: true });
+    expect((await call("ax_tree", { max_nodes: 0 })).structured?.reason).toBe("bad-request");
+    expect((await call("ax_tree", { scope: "desktop" })).structured?.reason).toBe("bad-request");
+  });
+
+  it("ax_press / ax_perform / ax_set_value send the ref; refs are checked", async () => {
+    const { call } = await granted1();
+    expect((await call("ax_press", { ref: "e2" })).isError).toBe(false);
+    await call("ax_perform", { ref: "e3", action: "Confirm" });
+    await call("ax_perform", { ref: "e3", action: "AXShowMenu" });
+    await call("ax_set_value", { ref: "e3", value: "秘密の値" });
+    expect(ops("axAction")).toMatchObject([
+      { ref: "e2", action: "AXPress" },
+      { ref: "e3", action: "AXConfirm" },
+      { ref: "e3", action: "AXShowMenu" },
+    ]);
+    expect(ops("axSetValue")[0]).toMatchObject({ ref: "e3", value: "秘密の値" });
+    expect((await call("ax_press", { ref: "button" })).structured?.reason).toBe("bad-request");
+    expect((await call("ax_set_value", { ref: "e3", value: { a: 1 } })).structured?.reason).toBe("bad-request");
+    helper.override.set("axAction", { ok: false, reason: "stale-ref", error: "gone" });
+    expect((await call("ax_press", { ref: "e9" })).structured?.reason).toBe("stale-ref");
+  });
+
+  it("the AX tools need a grant, and stop on Esc", async () => {
+    const { call } = await connect();
+    expect((await call("ax_tree")).structured?.reason).toBe("no-access");
+    expect((await call("ax_press", { ref: "e1" })).structured?.reason).toBe("no-access");
+    await call("request_access", { apps: ["TextEdit"], reason: "r" });
+    helper.abort();
+    await new Promise((r) => setTimeout(r, 50));
+    expect((await call("ax_press", { ref: "e1" })).structured?.reason).toBe("aborted");
+    expect((await call("list_windows")).structured?.reason).toBe("aborted");
+  });
+
+  it("an old helper that does not know the op: helper-outdated", async () => {
+    const { call } = await granted1();
+    helper.override.set("listWindows", { ok: false, reason: "bad-request", error: "unknown op listWindows" });
+    expect((await call("screenshot")).structured).toMatchObject({ reason: "helper-outdated", op: "listWindows" });
+  });
+
+  it("the log has no value set through AX", async () => {
+    const logFile = path.join(dir, "d.jsonl");
+    const { call } = await connect({ logFile });
+    await call("request_access", { apps: ["TextEdit"], reason: "r" });
+    await call("ax_set_value", { ref: "e3", value: "秘密の値" });
+    const text = fs.readFileSync(logFile, "utf8");
+    expect(text).not.toContain("秘密の値");
+    expect(text).toContain('"tool":"ax_set_value"');
+    expect(text).toContain('"length":4');
   });
 });
 

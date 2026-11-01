@@ -2,6 +2,14 @@
 // (top-left origin of the main display), the space CGEvent uses; the MCP
 // server converts screenshot pixels to points before calling.
 //
+// Two targets (syn-7):
+// - `.hid`: posted at the HID tap, like the user's own mouse and keys. The
+//   cursor moves and the frontmost app gets the keys (the foreground fallback).
+// - `.process(pid, window)`: `CGEvent.postToPid` into one app, from a private
+//   event source, with the window fields set so AppKit routes a click to that
+//   window even when it is behind others or on another Space. The cursor does
+//   not move and the app is not activated.
+//
 // Every event we post carries `inputMarker` in eventSourceUserData, so the
 // Esc watcher can tell our own Escape key from the user's.
 import CoreGraphics
@@ -45,13 +53,37 @@ enum MouseButton: String {
     }
 }
 
-enum Input {
-    private static let source = CGEventSource(stateID: .hidSystemState)
+enum InputTarget {
+    case hid
+    case process(pid: pid_t, window: CGWindowID)
+}
 
-    private static func post(_ e: CGEvent?) {
+enum Input {
+    private static let hidSource = CGEventSource(stateID: .hidSystemState)
+    private static let privateSource = CGEventSource(stateID: .privateState)
+
+    private static func source(_ t: InputTarget) -> CGEventSource? {
+        if case .hid = t { return hidSource }
+        return privateSource
+    }
+
+    private static func post(_ e: CGEvent?, _ t: InputTarget) {
         guard let e else { return }
         e.setIntegerValueField(.eventSourceUserData, value: inputMarker)
-        e.post(tap: .cghidEventTap)
+        switch t {
+        case .hid:
+            e.post(tap: .cghidEventTap)
+        case let .process(pid, window):
+            if window != 0 && e.type != .keyDown && e.type != .keyUp && e.type != .flagsChanged {
+                e.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: Int64(window))
+                e.setIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent, value: Int64(window))
+            }
+            e.postToPid(pid)
+        }
+    }
+
+    private static func mouse(_ t: InputTarget, _ type: CGEventType, _ p: CGPoint, _ b: CGMouseButton) -> CGEvent? {
+        CGEvent(mouseEventSource: source(t), mouseType: type, mouseCursorPosition: p, mouseButton: b)
     }
 
     private static func pause(_ ms: UInt32) { usleep(ms * 1000) }
@@ -60,76 +92,78 @@ enum Input {
         CGEvent(source: nil)?.location ?? .zero
     }
 
-    static func move(to p: CGPoint) {
-        post(CGEvent(mouseEventSource: source, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left))
+    static func move(to p: CGPoint, _ t: InputTarget = .hid) {
+        post(mouse(t, .mouseMoved, p, .left), t)
         pause(15)
     }
 
-    static func click(at p: CGPoint, button: MouseButton, count: Int, flags: CGEventFlags) {
-        move(to: p)
+    static func click(at p: CGPoint, button: MouseButton, count: Int, flags: CGEventFlags, _ t: InputTarget = .hid) {
+        move(to: p, t)
         for i in 1...max(1, count) {
             for type in [button.downType, button.upType] {
-                let e = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: p, mouseButton: button.cg)
+                let e = mouse(t, type, p, button.cg)
                 e?.setIntegerValueField(.mouseEventClickState, value: Int64(i))
                 e?.flags = flags
-                post(e)
+                post(e, t)
                 pause(10)
             }
             pause(30)
         }
     }
 
-    static func button(_ down: Bool, at p: CGPoint, button: MouseButton) {
-        let e = CGEvent(mouseEventSource: source, mouseType: down ? button.downType : button.upType, mouseCursorPosition: p, mouseButton: button.cg)
+    static func button(_ down: Bool, at p: CGPoint, button: MouseButton, _ t: InputTarget = .hid) {
+        let e = mouse(t, down ? button.downType : button.upType, p, button.cg)
         e?.setIntegerValueField(.mouseEventClickState, value: 1)
-        post(e)
+        post(e, t)
         pause(15)
     }
 
-    static func drag(from a: CGPoint, to b: CGPoint, button: MouseButton) {
-        move(to: a)
-        Input.button(true, at: a, button: button)
+    static func drag(from a: CGPoint, to b: CGPoint, button: MouseButton, _ t: InputTarget = .hid) {
+        move(to: a, t)
+        Input.button(true, at: a, button: button, t)
         let steps = 20
         for i in 1...steps {
-            let t = CGFloat(i) / CGFloat(steps)
-            let p = CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
-            post(CGEvent(mouseEventSource: source, mouseType: button.dragType, mouseCursorPosition: p, mouseButton: button.cg))
+            let f = CGFloat(i) / CGFloat(steps)
+            let p = CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f)
+            post(mouse(t, button.dragType, p, button.cg), t)
             pause(10)
         }
-        Input.button(false, at: b, button: button)
+        Input.button(false, at: b, button: button, t)
     }
 
     /// `dy` > 0 scrolls up, `dx` > 0 scrolls left (line units, like a wheel).
-    static func scroll(at p: CGPoint, dx: Int32, dy: Int32) {
-        move(to: p)
-        post(CGEvent(scrollWheelEvent2Source: source, units: .line, wheelCount: 2, wheel1: dy, wheel2: dx, wheel3: 0))
+    static func scroll(at p: CGPoint, dx: Int32, dy: Int32, _ t: InputTarget = .hid) {
+        move(to: p, t)
+        let e = CGEvent(scrollWheelEvent2Source: source(t), units: .line, wheelCount: 2, wheel1: dy, wheel2: dx, wheel3: 0)
+        e?.location = p
+        post(e, t)
         pause(20)
     }
 
-    static func key(_ combo: KeyCombo) {
+    static func key(_ combo: KeyCombo, _ t: InputTarget = .hid) {
         for down in [true, false] {
-            let e = CGEvent(keyboardEventSource: source, virtualKey: combo.keyCode, keyDown: down)
+            let e = CGEvent(keyboardEventSource: source(t), virtualKey: combo.keyCode, keyDown: down)
             e?.flags = combo.flags
-            post(e)
+            post(e, t)
             pause(8)
         }
     }
 
     /// Types `text` one character at a time; stops early once `shouldContinue` is false (Esc).
-    static func type(_ text: String, shouldContinue: () -> Bool) -> Int {
+    static func type(_ text: String, _ t: InputTarget = .hid, shouldContinue: () -> Bool) -> Int {
         var typed = 0
         for ch in text {
             if !shouldContinue() { break }
             if ch == "\n" || ch == "\r\n" {
-                key(KeyCombo(keyCode: 36, flags: []))
+                key(KeyCombo(keyCode: 36, flags: []), t)
             } else if ch == "\t" {
-                key(KeyCombo(keyCode: 48, flags: []))
+                key(KeyCombo(keyCode: 48, flags: []), t)
             } else {
                 let units = Array(String(ch).utf16)
                 for down in [true, false] {
-                    let e = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down)
+                    let e = CGEvent(keyboardEventSource: source(t), virtualKey: 0, keyDown: down)
                     e?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
-                    post(e)
+                    post(e, t)
                 }
                 pause(8)
             }

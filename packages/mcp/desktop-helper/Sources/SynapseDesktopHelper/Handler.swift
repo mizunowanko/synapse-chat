@@ -10,21 +10,32 @@
 // | resolveApps        | apps: [name or bundle id]                          | {apps: [{query, bundleId, name, path}]} |
 // | beginSession       | session, apps, inputApps, expiresAt? (ms epoch)    | {session} |
 // | endSession         | session                                            | {} |
-// | openApp            | session, bundleId                                  | the app |
-// | screenshot         | session, region?, maxWidth?, maxHeight?, format?, quality? | image + geometry |
+// | openApp            | session, bundleId                                  | the app, windowOnScreen (waits ≤ 2 s) |
+// | listWindows        | session                                            | {windows: [{id, pid, bundleId, app, title, x, y, width, height, onScreen, minimized, hidden, capturable, display}]} |
+// | screenshot         | session, window?, region?, maxWidth?, maxHeight?, format?, quality? | image + geometry (window: that window alone, wherever it is) |
+// | axTree             | session, window? / bundleId?, scope? (window / menubar), maxDepth?, maxNodes?, all?, maxWidth?, maxHeight? | {nodes, truncated, window?, geometry?} |
+// | axAction           | session, ref, action (AXPress, AXConfirm, AXIncrement, AXShowMenu, …) | {ref, app, element} |
+// | axSetValue         | session, ref, value                                | {ref, app, element} |
 // | cursor             | session                                            | {x, y} (points) |
-// | click              | session, x, y, button?, count?, modifiers?          | {app} |
-// | move               | session, x, y                                       | {app} |
-// | mouseDown/mouseUp  | session, x?, y?, button?                            | {app} |
-// | drag               | session, x, y, toX, toY, button?                    | {app} |
-// | scroll             | session, x, y, dx, dy                               | {app} |
-// | key                | session, keys ("cmd+shift+a", "ctrl+a Delete")     | {app} |
-// | type               | session, text                                       | {app, typed} |
+// | click              | session, x, y, button?, count?, modifiers?, window? | {app, background, via (ax-press / ax-focus / event / hid), element?} |
+// | move               | session, x, y, window?                              | {app, background} |
+// | mouseDown/mouseUp  | session, x?, y?, button?, window?                   | {app, background} |
+// | drag               | session, x, y, toX, toY, button?, window?           | {app, background} |
+// | scroll             | session, x, y, dx, dy, window?                      | {app, background} |
+// | key                | session, keys ("cmd+shift+a", "ctrl+a Delete"), window? | {app, background} |
+// | type               | session, text, window?                              | {app, typed, background} |
+//
+// `window` (a CGWindowID from listWindows / screenshot) sends the events to
+// that window's process (CGEvent.postToPid): the cursor stays and the app is
+// not activated. A plain left click there first goes through AX (the element
+// under the point is pressed or focused, AX.clickThroughAX): AppKit drops a
+// posted click on an inactive window, keys it takes. Without it they go through the HID tap as before (the
+// foreground fallback: the cursor moves, keys go to the frontmost app).
 import AppKit
 import ApplicationServices
 import CoreGraphics
 
-let helperVersion = "1"
+let helperVersion = "2"
 
 final class Handler {
     let sessions: SessionManager
@@ -78,7 +89,20 @@ final class Handler {
             let s = try sessions.require(r["session"] as? String)
             guard let bid = r["bundleId"] as? String else { throw HelperError("bad-request", "bundleId is required") }
             guard s.apps.contains(bid) else { throw notAllowed(bid, nil, "open") }
-            return try Apps.open(bundleId: bid)
+            var opened = try Apps.open(bundleId: bid)
+            // The Space switch takes a moment: wait for a window before the next screenshot / click.
+            if let pid = opened["pid"] as? Int {
+                opened["windowOnScreen"] = Windows.waitOnScreen(pid: pid_t(pid), timeout: 2)
+            }
+            return opened
+        case "listWindows":
+            let s = try sessions.require(r["session"] as? String)
+            let displays = Windows.activeDisplays()
+            return ["windows": try Windows.list(bundleIds: s.apps).map { $0.json(displays: displays) }]
+        case "axTree":
+            return try axTree(r)
+        case "axAction", "axSetValue":
+            return try axAct(op, r)
         case "screenshot":
             let s = try sessions.require(r["session"] as? String)
             var o = Capture.Options()
@@ -89,6 +113,15 @@ final class Handler {
             if let h = num(r["maxHeight"]) { o.maxHeight = Int(h) }
             if let f = r["format"] as? String { o.format = f }
             if let q = num(r["quality"]) { o.quality = q }
+            if let wid = num(r["window"]) {
+                guard let w = try Windows.find(CGWindowID(wid), bundleIds: s.apps) else {
+                    if Windows.lookup(CGWindowID(wid), bundleIds: s.apps) != nil {
+                        throw HelperError("capture-failed", "ScreenCaptureKit does not list the window \(Int(wid)) right now (it may be closing or redrawing). Try again.")
+                    }
+                    throw HelperError("no-window", "No window \(Int(wid)) of an allowed app. Call list_windows.", extra: ["apps": s.apps.sorted()])
+                }
+                return try Windows.capture(w, options: o)
+            }
             return try Capture.screenshot(apps: s.apps, options: o)
         case "cursor":
             _ = try sessions.require(r["session"] as? String)
@@ -100,21 +133,21 @@ final class Handler {
             let s = try requireInput(r)
             guard let text = r["keys"] as? String else { throw HelperError("bad-request", "keys is required") }
             let combos = try KeyParser.parse(text)
-            let app = try checkFrontmost(s)
+            let (app, target) = try keyTarget(s, r)
             for c in combos {
                 guard sessions.stillHeld(s.id) else { break }
-                Input.key(c)
+                Input.key(c, target)
             }
-            return ["app": app]
+            return ["app": app, "background": isBackground(target)]
         case "type":
             let s = try requireInput(r)
             guard let text = r["text"] as? String else { throw HelperError("bad-request", "text is required") }
-            let app = try checkFrontmost(s)
-            let typed = Input.type(text) { sessions.stillHeld(s.id) }
+            let (app, target) = try keyTarget(s, r)
+            let typed = Input.type(text, target) { sessions.stillHeld(s.id) }
             if typed < text.count && !sessions.stillHeld(s.id) {
                 throw HelperError("aborted", "The user aborted the session while typing (\(typed) of \(text.count) characters typed).")
             }
-            return ["app": app, "typed": typed]
+            return ["app": app, "typed": typed, "background": isBackground(target)]
         default:
             throw HelperError("bad-request", "unknown op \(op)")
         }
@@ -207,12 +240,136 @@ final class Handler {
         return ["bundleId": bid, "name": owner.name ?? NSNull(), "pid": Int(owner.pid)]
     }
 
+    private func isBackground(_ t: InputTarget) -> Bool {
+        if case .hid = t { return false }
+        return true
+    }
+
+    /// A window that takes input: its owner (from the window server, wherever the window is) must be in `inputApps`.
+    private func inputWindow(_ s: Session, _ id: CGWindowID) throws -> (pid: pid_t, frame: CGRect, app: JSON) {
+        guard let list = CGWindowListCopyWindowInfo([.optionIncludingWindow], id) as? [[String: Any]],
+              let w = list.first, let pid = w[kCGWindowOwnerPID as String] as? Int32,
+              let b = w[kCGWindowBounds as String] as? NSDictionary, let frame = CGRect(dictionaryRepresentation: b) else {
+            throw HelperError("no-window", "No window \(id). Call list_windows.")
+        }
+        let app = NSRunningApplication(processIdentifier: pid)
+        guard let bid = app?.bundleIdentifier, s.inputApps.contains(bid) else {
+            throw notAllowed(app?.bundleIdentifier, app?.localizedName, "input")
+        }
+        return (pid, frame, ["bundleId": bid, "name": app?.localizedName ?? NSNull(), "pid": Int(pid)])
+    }
+
+    /// Keys go to `window`'s process when given (background), else to the frontmost app.
+    private func keyTarget(_ s: Session, _ r: JSON) throws -> (JSON, InputTarget) {
+        if let wid = num(r["window"]) {
+            let w = try inputWindow(s, CGWindowID(wid))
+            return (w.app, .process(pid: w.pid, window: CGWindowID(wid)))
+        }
+        return (try checkFrontmost(s), .hid)
+    }
+
+    // MARK: - accessibility
+
+    private func requireAX() throws {
+        guard AXIsProcessTrusted() else {
+            throw HelperError("permission", "Accessibility is not granted to the desktop helper.", extra: ["permission": "accessibility"])
+        }
+        AX.setTimeouts()
+    }
+
+    private func axTree(_ r: JSON) throws -> JSON {
+        let s = try sessions.require(r["session"] as? String)
+        try requireAX()
+        var o = AX.TreeOptions()
+        if let d = num(r["maxDepth"]) { o.maxDepth = max(1, min(60, Int(d))) }
+        if let n = num(r["maxNodes"]) { o.maxNodes = max(1, min(2000, Int(n))) }
+        o.all = (r["all"] as? Bool) ?? false
+        let scope = (r["scope"] as? String) ?? "window"
+        var out: JSON = [:]
+        let root: AXUIElement
+        let pid: pid_t
+        if let wid = num(r["window"]) {
+            guard let w = Windows.lookup(CGWindowID(wid), bundleIds: s.apps) else {
+                throw HelperError("no-window", "No window \(Int(wid)) of an allowed app. Call list_windows.", extra: ["apps": s.apps.sorted()])
+            }
+            pid = w.pid
+            out["window"] = w.json(displays: Windows.activeDisplays())
+            out["geometry"] = Windows.geometry(frame: w.frame, maxWidth: Int(num(r["maxWidth"]) ?? 1456), maxHeight: Int(num(r["maxHeight"]) ?? 1456))
+            if scope == "menubar" {
+                root = AXUIElementCreateApplication(pid)
+            } else {
+                guard let axw = AX.window(pid: pid, id: w.id) else {
+                    throw HelperError("ax-no-window", "Accessibility cannot reach the window \(w.id) of \(w.appName) right now.", extra: ["window": out["window"]!])
+                }
+                root = axw
+            }
+        } else if let bid = r["bundleId"] as? String {
+            guard s.apps.contains(bid) else { throw notAllowed(bid, nil, "reading") }
+            guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bid).first else {
+                throw HelperError("not-running", "\(bid) is not running.")
+            }
+            pid = app.processIdentifier
+            root = AXUIElementCreateApplication(pid)
+        } else {
+            throw HelperError("bad-request", "window or bundleId is required")
+        }
+        var top = root
+        if scope == "menubar" {
+            guard let bar = AX.attr(root, kAXMenuBarAttribute), CFGetTypeID(bar) == AXUIElementGetTypeID() else {
+                throw HelperError("ax-failed", "The app has no menu bar to read.")
+            }
+            top = bar as! AXUIElement
+        }
+        let t = AX.tree(top, session: s.id, options: o)
+        out["nodes"] = t.nodes
+        out["truncated"] = t.truncated
+        out["scope"] = scope
+        return out
+    }
+
+    private static let foregroundActions: Set<String> = ["AXRaise"]
+
+    private func axAct(_ op: String, _ r: JSON) throws -> JSON {
+        let s = try requireInput(r)
+        try requireAX()
+        guard let ref = r["ref"] as? String else { throw HelperError("bad-request", "ref is required") }
+        let e = try AX.element(ref, session: s.id)
+        guard let pid = AX.pid(of: e) else { throw HelperError("stale-ref", "The element \(ref) is gone. Call ax_tree again.") }
+        let app = NSRunningApplication(processIdentifier: pid)
+        guard let bid = app?.bundleIdentifier, s.inputApps.contains(bid) else {
+            throw notAllowed(app?.bundleIdentifier, app?.localizedName, "input")
+        }
+        if op == "axAction" {
+            guard let action = r["action"] as? String, action.hasPrefix("AX") else { throw HelperError("bad-request", "action (AXPress, …) is required") }
+            if Self.foregroundActions.contains(action) {
+                throw HelperError("bad-request", "\(action) would bring the window to the front; it is not offered in the background.")
+            }
+            try AX.perform(e, action)
+        } else {
+            guard let v = r["value"], v is String || v is NSNumber else { throw HelperError("bad-request", "value (string or number) is required") }
+            try AX.setValue(e, v)
+        }
+        usleep(80_000)
+        return ["ref": ref, "app": ["bundleId": bid, "name": app?.localizedName ?? NSNull(), "pid": Int(pid)] as JSON, "element": AX.describe(e)]
+    }
+
     private func mouse(_ op: String, _ r: JSON) throws -> JSON {
         let s = try requireInput(r)
         let button = MouseButton(rawValue: (r["button"] as? String) ?? "left") ?? .left
         let here = Input.cursor()
         let p = CGPoint(x: num(r["x"]) ?? Double(here.x), y: num(r["y"]) ?? Double(here.y))
-        let app = try checkPoint(s, p)
+        var target = InputTarget.hid
+        let app: JSON
+        if let wid = num(r["window"]) {
+            let w = try inputWindow(s, CGWindowID(wid))
+            guard w.frame.insetBy(dx: -1, dy: -1).contains(p) else {
+                throw HelperError("bad-request", "(\(Int(p.x)), \(Int(p.y))) is outside the window \(Int(wid)).")
+            }
+            target = .process(pid: w.pid, window: CGWindowID(wid))
+            app = w.app
+        } else {
+            app = try checkPoint(s, p)
+        }
         switch op {
         case "click":
             var flags: CGEventFlags = []
@@ -220,22 +377,28 @@ final class Handler {
                 guard let f = KeyParser.modifiers[m.lowercased()] else { throw HelperError("bad-request", "unknown modifier \(m)") }
                 flags.insert(f)
             }
-            Input.click(at: p, button: button, count: Int(num(r["count"]) ?? 1), flags: flags)
+            let count = Int(num(r["count"]) ?? 1)
+            if case let .process(pid, window) = target, button == .left, count == 1, flags.isEmpty,
+               let done = AX.clickThroughAX(pid: pid, window: window, at: p) {
+                usleep(80_000)
+                return ["app": app, "background": true, "via": done.via, "element": done.element]
+            }
+            Input.click(at: p, button: button, count: count, flags: flags, target)
         case "move":
-            Input.move(to: p)
+            Input.move(to: p, target)
         case "mouseDown", "mouseUp":
-            Input.button(op == "mouseDown", at: p, button: button)
+            Input.button(op == "mouseDown", at: p, button: button, target)
         case "drag":
             guard let tx = num(r["toX"]), let ty = num(r["toY"]) else { throw HelperError("bad-request", "toX / toY are required") }
             let to = CGPoint(x: tx, y: ty)
-            _ = try checkPoint(s, to)
-            Input.drag(from: p, to: to, button: button)
+            if case .hid = target { _ = try checkPoint(s, to) }
+            Input.drag(from: p, to: to, button: button, target)
         case "scroll":
-            Input.scroll(at: p, dx: Int32(num(r["dx"]) ?? 0), dy: Int32(num(r["dy"]) ?? 0))
+            Input.scroll(at: p, dx: Int32(num(r["dx"]) ?? 0), dy: Int32(num(r["dy"]) ?? 0), target)
         default:
             break
         }
-        return ["app": app]
+        return ["app": app, "background": isBackground(target), "via": isBackground(target) ? "event" : "hid"]
     }
 }
 

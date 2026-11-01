@@ -1,11 +1,11 @@
 # macOS のデスクトップを MCP で見て操作する（desktop）
 
-CLI のセッション（Claude Code / Codex / agy）から、macOS のアプリのスクリーンショットを撮り、クリック・キー入力をするための **stdio の MCP サーバー**。ツールは Anthropic の computer use のツールに寄せてある。中身は 2 つに分かれる。
+CLI のセッション（Claude Code / Codex / agy）から、macOS のアプリを見て操作するための **stdio の MCP サーバー**。**既定は裏の操作**（syn-7）: 承認されたアプリのウィンドウを 1 枚ずつ撮り、アクセシビリティ（AX）で読んで押す。人の画面（最前面のアプリ・操作スペース・ポインタ）は変えない。Anthropic の computer use に寄せた、画面座標で本物のポインタを動かすツールは前面の手段として残してある。中身は 2 つに分かれる。
 
 | 部品 | 場所 | 持つもの |
 |---|---|---|
 | MCP サーバー（Node） | `@synapse-chat/mcp/desktop`（[`packages/mcp/src/desktop/`](../../packages/mcp/src/desktop/)）、bin `synapse-desktop` | ツール、承認 API の呼び出し、ブラウザを見るだけにする、期限、座標の換算 |
-| helper（Swift） | [`packages/mcp/desktop-helper/`](../../packages/mcp/desktop-helper/) を `.app` にビルド | macOS の権限（アクセシビリティ・画面収録）、ScreenCaptureKit、CGEvent、Esc での中止、1 セッションだけのロック、メニューバーの表示 |
+| helper（Swift） | [`packages/mcp/desktop-helper/`](../../packages/mcp/desktop-helper/) を `.app` にビルド | macOS の権限（アクセシビリティ・画面収録・入力監視）、ScreenCaptureKit（ウィンドウ単位と画面）、AX の木と操作、CGEvent（プロセス宛てと HID）、Esc での中止、1 セッションだけのロック、メニューバーの表示 |
 
 **MCP サーバーは許可を決めない。** 誰がどのアプリを使ってよいかは、`request_access` がアプリの承認 API に聞き、アプリが人に聞く。サーバーが自分で決めるのは、誰にでも同じ 2 つだけ（ブラウザは見るだけ、期限が切れたら全部断る）。helper は、承認されたアプリの集合を、スクリーンショット 1 枚・イベント 1 つごとにもう一度確かめる。
 
@@ -66,28 +66,55 @@ CLI のセッション（Claude Code / Codex / agy）から、macOS のアプリ
 
 ## ツール
 
-座標はすべて**直前の `screenshot` の画素**。サーバーが、helper の返した位置と大きさ（グローバルのポイント）で換算する。screenshot の前の座標、画像の外の座標は断る。
+座標はすべて**直前の `screenshot` の画素**（ウィンドウを撮ったならその画像の画素。`ax_tree` もウィンドウの座標を置く）。サーバーが、helper の返した位置と大きさ（グローバルのポイント）で換算する。screenshot の前の座標、画像の外の座標は断る。
+
+### 裏の操作（既定、syn-7）
+
+マスターは familia をフルスクリーンで使い、承認されたアプリ（計算機など）は別の操作スペースにある。そこで画面を撮る・本物のポインタを動かす・アプリを前に出す、という段 1 のやり方では人の画面を奪う（「それだと全然使えんぞ」）。Codex の computer use（Sky）と同じく、ウィンドウ単位の撮影とアクセシビリティで裏のまま操作する。
+
+| ツール | 引数 | |
+|---|---|---|
+| `list_windows` | — | 承認されたアプリのウィンドウを、どこにあっても挙げる。`id`・`title`・`app`・`bundleId`・`x/y/width/height`（ポイント）・`onScreen`・`minimized`・`hidden`・`capturable`・`display` |
+| `screenshot` | `window`（任意。id か、タイトル・アプリ名の一部）、`mode`（`window` 既定 / `screen`） | `window` モード: ウィンドウを 1 枚だけ撮る。`window` を省くと、直前のウィンドウ、無ければ入力できるアプリの撮れるウィンドウの最初。画像と `{ mode, width, height, window, otherWindows }` |
+| `ax_tree` | `window`、`scope`（`window` 既定 / `menubar`）、`max_depth`（既定 25）、`max_nodes`（既定 400、最大 2000）、`all` | AX の木を 1 行 1 要素の文字で返す: `[e8] AXButton (7) #Seven actions=Press @20,374 96x96`（位置と大きさはウィンドウの画像の画素）。言うことの無い入れ物（AXGroup など）は `all` でなければ飛ばす。値は 500 文字で切り、パスワード欄（`AXSecureTextField`）の値は出さない |
+| `ax_press` | `ref` | AXPress |
+| `ax_set_value` | `ref`、`value`（文字か数） | AXValue を書く。いまの値が数なら数にする |
+| `ax_perform` | `ref`、`action` | `actions` にあるもの（`AXConfirm`、`AXIncrement`、`AXDecrement`、`AXShowMenu`、`AXCancel`、`AXPick`…。`AX` は省いてよい）。`AXRaise` は前に出すので断る |
+
+- **ref**（`e12`）は helper がセッションの中で配る。同じ要素（`CFEqual`）は読み直しても同じ ref。アプリが消した要素は `stale-ref`。セッションが変わると表は捨てる
+- **ウィンドウを撮ったあとの入力**: `left_click` などと `key` / `type` / `scroll` / `left_click_drag` は、そのウィンドウのプロセスにだけ送る（helper の `window` 引数）。ポインタは動かず、アプリは前に出ない
+  - **ただの左クリック**（1 回、修飾キーなし）は、まず AX で通す: その点の要素（`AXUIElementCopyElementAtPosition`、ダメならウィンドウの木をたどる）か、その親（5 段まで、ウィンドウの手前まで）で `AXPress` を持つものを押す。入力欄なら `AXFocused` を立てる。結果に `via: "ax-press" | "ax-focus"` と要素を返す。押せるものが無いときだけ、次と同じ `CGEvent.postToPid`（`via: "event"`）
+  - それ以外（右・ダブル・修飾キー付き、ドラッグ、スクロール、キー、文字）は `CGEvent.postToPid`。private の event source から出し、マウスのイベントには `mouseEventWindowUnderMousePointer(ThatCanHandleThisEvent)` にウィンドウ番号を入れる
+  - 実測（macOS 26、別の操作スペースの計算機）: `key` / `type` は届く。**AppKit は前に出ていないウィンドウへの `postToPid` のクリックを捨てる**（ボタンが押されない）。だから左クリックは AX を先にした。右クリックなどイベントだけのものは、アプリによっては効かない
+- `left_mouse_down` / `left_mouse_up` は、ウィンドウを撮ったあとでは `coordinate` が要る（裏ではポインタの位置を使わない）
+- `AXShowMenu` はコンテキストメニューを開く。メニューはいまの画面に出ることがある（アプリによる）。メニュー項目は `ax_tree scope: "menubar"` の ref を `ax_press` するほうがよい
+
+### 前面の操作（予備）
 
 | ツール | 引数 | |
 |---|---|---|
 | `request_access` | `apps: string[]`（名前か bundle id）、`reason` | 承認を求めて待つ。インストールされていない名前は、頼む前に `unknown-app` |
 | `list_granted_applications` | — | `status`（`granted` / `none` / `aborted` / `expired`）、`apps`（`input: false` は見るだけ）、`expiresAt`、`pendingRequestId` |
-| `screenshot` | — | 画像（MCP の image content）と `{ width, height, apps, notVisible }`。承認されたアプリのウィンドウだけが写る |
-| `left_click` / `right_click` / `middle_click` / `double_click` / `triple_click` | `coordinate`、`text`（保持する修飾キー、`"cmd+shift"`） | |
+| `screenshot` `mode: "screen"` | — | メインディスプレイの画像と `{ mode, width, height, apps, notVisible }`。承認されたアプリのウィンドウだけが写る。いまの操作スペースに出ていなければ `no-window` |
+| `left_click` / `right_click` / `middle_click` / `double_click` / `triple_click` | `coordinate`、`text`（保持する修飾キー、`"cmd+shift"`） | `mode: "screen"` のあとは HID に流し、本物のポインタが動く |
 | `mouse_move` | `coordinate` | |
 | `left_click_drag` | `start_coordinate`、`coordinate` | 両端とも操作できるアプリの上でなければ断る |
 | `left_mouse_down` / `left_mouse_up` | `coordinate`（任意） | |
 | `scroll` | `coordinate`、`scroll_direction`（up / down / left / right）、`scroll_amount`（行、既定 3） | |
-| `key` | `text`（`"cmd+shift+a"`、`"Return"`、`"Page_Down"`。空白で区切ると順に） | 最前面のアプリに届く |
-| `type` | `text` | 最前面のアプリに届く。1 文字ずつ。Esc で途中で止まる |
-| `open_application` | `app` | 承認されたアプリだけ（見るだけのアプリも開ける） |
+| `key` | `text`（`"cmd+shift+a"`、`"Return"`、`"Page_Down"`。空白で区切ると順に） | `mode: "screen"` のあとは最前面のアプリに届く |
+| `type` | `text` | 同上。1 文字ずつ。Esc で途中で止まる |
+| `open_application` | `app` | 承認されたアプリだけ（見るだけのアプリも開ける）。**人の画面（操作スペース）が切り替わる**。開いたあと、ウィンドウが画面に出るまで最大 2 秒待つ（`windowOnScreen`） |
 | `cursor_position` | — | 直前の screenshot の画素 |
 | `wait` | `duration`（秒、最大 30） | |
-| `zoom` | `region: [x0, y0, x1, y1]`（画素） | その矩形を高い解像度で撮り直す。座標の基準は変わらない |
+| `zoom` | `region: [x0, y0, x1, y1]`（画素） | その矩形を高い解像度で撮り直す。直前がウィンドウならそのウィンドウの中を撮る。座標の基準は変わらない |
 
-- スクリーンショットは長辺 1456 画素に収め（`DEFAULT_SCREENSHOT_MAX`）、JPEG（品質 0.8）で返す。メインディスプレイだけ（段 1）
+- `open_application` のすぐあとの `screenshot mode: "screen"` が `no-window` になっていた（操作スペースの切り替えのアニメーションが終わる前に撮っていた）。helper は `openApp` のあと、ウィンドウが on-screen になるまで最大 2 秒待ち、画面の screenshot も、承認されたアプリが最前面なのにウィンドウが出ていなければ最大 2 秒待つ
+
+### 共通
+
+- スクリーンショットは長辺 1456 画素に収め（`DEFAULT_SCREENSHOT_MAX`）、JPEG（品質 0.8）で返す。ウィンドウはそのディスプレイの倍率（Retina 2、外部ディスプレイ 1 など）で撮る
 - annotations: 入力のツールは `readOnlyHint: false`・`destructiveHint: false`・`openWorldHint: false`。非対話の Codex に断られないため（peers と同じ）。関所は CLI の承認ではなく `request_access` とその先の人
-- instructions には「最初に `request_access`」「ブラウザは見るだけ」「座標は直前の screenshot の画素」「Esc で止まったら作業をやめ、ユーザーに確かめてから頼み直す」を書く。アプリの語（Desk など）は入れない
+- instructions には「人の画面を奪わずに裏で操作する」「最初に `request_access`」「ブラウザは見るだけ（AX の操作も）」「基本の流れ: screenshot → ax_tree → ax_press など → 確かめる」「AX で届かなければ left_click / key / type（裏で届く）」「`open_application` と `mode: \"screen\"` は前面の操作なので最後の手段」「Esc で止まったら作業をやめ、ユーザーに確かめてから頼み直す」を書く。アプリの語（Desk など）は入れない
 
 ### サーバーが自分で作る `reason`
 
@@ -100,11 +127,13 @@ CLI のセッション（Claude Code / Codex / agy）から、macOS のアプリ
 | `not-allowed` | 承認されていないアプリを開こうとした |
 | `unknown-app` | インストールされていない名前 |
 | `no-screenshot` | screenshot の前の座標 |
+| `no-window` | 承認されたアプリにウィンドウが無い・`window` に当たるものが無い（`windows` 付き） |
+| `helper-outdated` | helper が op を知らない（syn-7 より前の helper）。置き換えて起動し直す |
 | `bad-request` | 引数がおかしい・画像の外の座標 |
 | `server-unreachable` | 承認 API に繋がらない・形が違う |
 | `helper-unavailable` | helper を起動できない・答えない |
 
-helper の断り（`locked`、`not-allowed`、`permission` など、下）はそのまま渡す。
+helper の断り（`locked`、`not-allowed`、`permission`、`minimized`、`stale-ref`、`ax-failed` など、下）はそのまま渡す。
 
 ## helper
 
@@ -120,14 +149,35 @@ menu bar だけのアプリ（`LSUIElement`）。`~/Library/Application Support/
 | `requestPermissions` | 3 つの権限のダイアログを出す |
 | `listApps` / `resolveApps` | 動いているアプリと最前面、名前 → bundle id |
 | `beginSession` / `endSession` | ロックを取り、見てよいアプリ（`apps`）と操作してよいアプリ（`inputApps`、`apps` の部分集合）と期限を置く |
-| `screenshot` | ScreenCaptureKit。`SCContentFilter(display:including:)` に**承認されたアプリだけ**を渡すので、ほかのウィンドウ・壁紙・Dock・メニューバーはウィンドウサーバーの段階で写らない。承認されたアプリのウィンドウがメインディスプレイに 1 枚も出ていなければ `no-window`（下） |
-| `openApp` / `cursor` / `click` / `move` / `mouseDown` / `mouseUp` / `drag` / `scroll` / `key` / `type` | CGEvent |
+| `listWindows` | `SCShareableContent`（`onScreenWindowsOnly: false`）の、承認されたアプリのウィンドウ。アプリが持つディスプレイごとのメニューバーの帯（幅いっぱい・高さ 30 ほど・無題）や小さな無題のものは除く。`minimized` は AX（`AXMinimized`）から |
+| `screenshot` `window` 付き | `SCContentFilter(desktopIndependentWindow:)` でそのウィンドウだけを撮る（下の表）。位置と大きさはウィンドウの frame。`minimized` / `hidden` は撮る前に断る |
+| `screenshot` `window` なし | ScreenCaptureKit。`SCContentFilter(display:including:)` に**承認されたアプリだけ**を渡すので、ほかのウィンドウ・壁紙・Dock・メニューバーはウィンドウサーバーの段階で写らない。承認されたアプリのウィンドウがメインディスプレイに 1 枚も出ていなければ `no-window`（下） |
+| `axTree` | `window`（と `scope`）の AX の木。位置はグローバルのポイントで返し、`geometry`（その window を撮ったときの画像の大きさ）を添える |
+| `axAction` / `axSetValue` | `ref` の要素に `AXUIElementPerformAction` / `AXUIElementSetAttributeValue(kAXValue)` |
+| `openApp` / `cursor` / `click` / `move` / `mouseDown` / `mouseUp` / `drag` / `scroll` / `key` / `type` | CGEvent。`window` があればそのプロセスへ（`postToPid`）、無ければ HID |
+
+#### ウィンドウ単位の撮影（実測、macOS 26、2026-11-01）
+
+| ウィンドウが… | 撮れるか |
+|---|---|
+| ほかのウィンドウの裏 | 撮れる（覆っているものは写らない） |
+| 別の操作スペース（フルスクリーンの familia の裏） | 撮れる（計算機で確かめた） |
+| もう 1 枚のディスプレイ（(0,-1080) 1920x1080） | 撮れる（倍率 1） |
+| 最小化 | 撮れない（`SCStreamErrorDomain -3811`）→ helper は撮る前に `minimized` で断る |
+| 隠す（cmd+H） | 撮る前に `hidden` で断る（試していない） |
+
+裏・別のディスプレイ・最小化は、使い捨ての AppKit のウィンドウ（helper の外、端末の画面収録の権限）で確かめた。
+
+#### AX のウィンドウ
+
+CGWindowID と AX のウィンドウは `_AXUIElementGetWindow`（private。yabai / Hammerspoon / AltTab と同じ）で結ぶ。別の操作スペースのウィンドウは `AXWindows` に出ないことがあるので、そのときはアプリの要素を `_AXUIElementCreateWithRemoteToken` で順に作って探す（AltTab と同じ。2 秒で打ち切る）。計算機（別の操作スペース）の木は 0.07〜0.17 秒で読めた。
 
 ### helper が確かめること
 
 - **1 セッションだけ**: `beginSession` は、別のセッションがロックを持ち、その接続が生きていて期限内なら `locked`（`holder` 付き）。ロックは `endSession`・接続が切れたとき・Esc で外れる。MCP サーバーは自分のセッション id（UUID）を毎回送る
-- **入力の前に**: クリック・スクロール・ドラッグは、その点の一番手前のウィンドウの持ち主が `inputApps` にあるか。キーと文字は最前面のアプリが `inputApps` にあるか。違えば `not-allowed`（`app` 付き）。期限切れは `expired`
-- **Esc**: listen-only の CGEventTap でキーを見て、ユーザーの Esc でセッションを捨て、`aborted` を送る。helper が送るイベントには印（`eventSourceUserData`）を付けてあるので、エージェントが `key Escape` を押しても止まらない。Esc はアプリにもそのまま届く（奪わない）。止めたセッションの次のリクエストには `aborted` を返す
+- **入力の前に**: 画面のクリック・スクロール・ドラッグは、その点の一番手前のウィンドウの持ち主が `inputApps` にあるか。画面のキーと文字は最前面のアプリが `inputApps` にあるか。`window` 付き（裏）は、そのウィンドウの持ち主（ウィンドウサーバーに聞く）が `inputApps` にあるかと、点がそのウィンドウの中か。AX の操作は、要素の pid のアプリが `inputApps` にあるか。違えば `not-allowed`（`app` 付き）。期限切れは `expired`。AX の木を読むのと撮るのは `apps`（見るだけのブラウザも読める）
+- **ブラウザ**: `inputApps` に入らないので、AX の操作・値の書き換え・プロセス宛てのイベントも `not-allowed`。MCP サーバーは helper に聞く前に `read-only` で断る
+- **Esc**: listen-only の CGEventTap でキーを見て、ユーザーの Esc でセッションを捨て、`aborted` を送る。裏の操作（AX、`postToPid`）も同じセッションの中なので、Esc のあとは `aborted`。入力監視が無いときに入力を断るのも同じ（AX の操作も入力として扱う）。helper が送るイベントには印（`eventSourceUserData`）を付けてあるので、エージェントが `key Escape` を押しても止まらない。Esc はアプリにもそのまま届く（奪わない）。止めたセッションの次のリクエストには `aborted` を返す
 - **権限**: 3 つ要る。アクセシビリティ（入力）、画面収録（`screenshot`）、入力監視（Esc の見張り）。アクセシビリティが無いと入力は `permission`（`permission: "accessibility"`）。Esc の見張りはキーボードのイベントタップで、**macOS 26 ではアクセシビリティだけでは作れず入力監視（`kTCCServiceListenEvent`）が要る**（listen-only でも能動のタップでも同じ。syn-6 で確かめた）。見張りが動いていないあいだは入力を断る（`permission: "inputMonitoring"`。止める手段が無いまま操作させない）。画面収録が無いと `screenshot` は `permission`（`permission: "screenRecording"`）
 - **写すウィンドウが無い**: 承認されたアプリのウィンドウが、メインディスプレイにいま出ていない（別の操作スペース、フルスクリーンの別スペース、最小化、隠す、別のディスプレイ）と、ウィンドウサーバーは空の画像ではなく `SCStreamErrorDomain -3811`（internalError）で失敗する。権限の問題に見えるが違う（syn-6）。helper は撮る前に `SCShareableContent` の on-screen のウィンドウを見て、無ければ `no-window`（`apps` 付き）で断る。確かめたあとに消えたときの ScreenCaptureKit の失敗は `capture-failed`（`code` 付き）
 - メニューバー: セッション中は赤い ●、ほかは ○。メニューに状態・「停止（Esc）」・権限の状態・「権限を求める…」・「終了」
@@ -175,7 +225,7 @@ node …/dist/desktop/cli.js status [--socket <path>] [--helper-app <app>]     #
 | agy | `agyDesktopPluginFiles()`（`.agents/plugins/synapse-desktop/`）、取り下げは `withdrawDesktopFiles("agy")` |
 
 - サーバーの名前は既定で `desktop`（`mcp__desktop__screenshot`）。ほかの `desktop` という server と重なるなら、`name` で変える
-- `--log` の JSONL には `initialized`・`tools/call`（ツール名・結果・`reason`）・`access`（`requestId`・`status`・bundle id）・`aborted` を残す。**画像と打った文字は書かない**（`type` は文字数だけ）
+- `--log` の JSONL には `initialized`・`tools/call`（ツール名・結果・`reason`）・`access`（`requestId`・`status`・bundle id）・`aborted` を残す。**画像と打った文字・書いた値は書かない**（`type` と `ax_set_value` は文字数だけ）。AX の木の中身も書かない
 - `--token` を使うなら、peers と同じく起動のログに引数を出さない・agy の plugin は 0600
 
 ## 確かめ方
@@ -191,10 +241,19 @@ helper は `swift build` が通ることと、`synapse-desktop status --socket /
 - 同じ identity でビルドし直して置き換えても、`accessibility` / `screenRecording` / `inputMonitoring` / `escWatcher` が true のまま
 - 入力監視が無いと `escWatcher` が false（アクセシビリティがあっても）
 
-**まだ見ていないもの**: クリック・キー入力、Esc での中止、メニューバーの表示、複数のアプリを承認したときの写り方。
+2026-11-01（syn-7）、同じ helper を 3 回ビルドし直して置き換え（権限はそのまま）、計算機（別の操作スペース、マスターはフルスクリーンの familia）だけを承認して、socket と実の MCP サーバー（`synapse-desktop serve` と偽の承認 API）から次を見た:
 
-## 段 1 でやらないこと
+- `list_windows` に計算機のウィンドウ（`onScreen: false`）が出て、`screenshot` が計算機だけを 460×816 で撮る
+- `ax_tree` がボタン（`[e8] AXButton (7) #Seven actions=Press` …）と表示（`AXStaticText = "0"`）を返す
+- `ax_press` 7 → 表示が `7`（AX で読み、撮り直した画像にも 7）→ `left_click` で 8 のボタンの画素（`via: "ax-press"`）→ `key "9"`（`postToPid`）→ 表示 `789` → `ax_perform` すべて消去 → `0`
+- 各操作の前後で、最前面のアプリ（`NSWorkspace.frontmostApplication`）は変わらない。ポインタの位置は、`postToPid` のクリックの前後で同じ（AX の操作はポインタに触れない。ほかの計測の差は、マスターがマウスを動かしていたもの）
+- `postToPid` のクリックだけでは計算機のボタンは押されない（上）。`mode: "screen"` は `no-window`
+
+**まだ見ていないもの**: 画面のクリック・キー入力の前面の経路（syn-7 でも人の画面を切り替えないため試していない）、`open_application` のあとの待ち、Esc での中止、メニューバーの表示、複数のアプリを承認したときの写り方、`ax_set_value` が効く入力欄（計算機には無い）、`hidden` のウィンドウ。
+
+## まだやらないこと
 
 - アプリの承認 UI と API（familia の後の段）
-- 複数ディスプレイ（メインディスプレイだけ）、アクセシビリティの木の読み取り、クリップボード
+- 画面モードの複数ディスプレイ（`mode: "screen"` はメインディスプレイだけ。ウィンドウはどのディスプレイでも撮れる）、クリップボード
+- 最小化されたウィンドウを裏で撮ること（macOS ができない。AX の木は読めるはずだが試していない）
 - ターミナルや IDE を「クリックだけ」にするような、アプリの種類ごとの段階（ブラウザだけ見るだけにする）
