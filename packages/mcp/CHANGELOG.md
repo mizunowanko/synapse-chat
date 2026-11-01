@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.11.0
+
+### Minor Changes
+
+- desktop: 承認されたアプリを、人の画面を奪わずに裏で見て操作する（syn-7）。`screenshot` は既定でウィンドウを 1 枚だけ撮る（裏・別の操作スペース・別のディスプレイでも撮れる。最小化は `minimized`）。`list_windows`、AX の木を ref 付きで読む `ax_tree`（`scope: "menubar"` も）、ref を操作する `ax_press` / `ax_set_value` / `ax_perform` を足した。ウィンドウを撮ったあとの `left_click`（左クリックは AX で押す）・`key`・`type`・`scroll` などは、そのアプリにだけ `CGEvent.postToPid` で送り、ポインタも最前面のアプリも変えない。従来の画面座標の操作は `screenshot` の `mode: "screen"` のあとの前面の手段として残し、`open_application` のあとはウィンドウが出るまで最大 2 秒待つ。helper（版 2）を置き換えること。古い helper には `helper-outdated` を返す。
+
 ## 0.10.1
 
 ### Patch Changes
