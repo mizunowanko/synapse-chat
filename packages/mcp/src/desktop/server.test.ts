@@ -591,6 +591,17 @@ describe("the background path (syn-7): one window, AX, events to the app", () =>
     expect(ops("screenshot")[1]).toMatchObject({ window: 11, region: { x: 100, y: 50, width: 200, height: 100 } });
   });
 
+  it("registers screenshot with its window / mode args and a window-first description", async () => {
+    const { mcp } = await connect();
+    const { tools } = await mcp.listTools();
+    const t = tools.find((x) => x.name === "screenshot")!;
+    expect(Object.keys(t.inputSchema.properties ?? {}).sort()).toEqual(["mode", "window"]);
+    expect(t.inputSchema.properties?.mode).toMatchObject({ enum: ["window", "screen"] });
+    expect(t.description).toMatch(/ウィンドウ/);
+    expect(t.description).not.toMatch(/^画面\(メインディスプレイ\)を撮る/);
+    expect(tools.find((x) => x.name === "ax_tree")!.inputSchema.properties).toHaveProperty("scope");
+  });
+
   it("selects a window by id or by a part of its title; the next screenshot stays on it", async () => {
     const { call } = await granted1();
     const r = await call("screenshot", { window: "別の" });
@@ -625,6 +636,11 @@ describe("the background path (syn-7): one window, AX, events to the app", () =>
     expect(lines[2]).toBe('  [e2] AXButton "保存" actions=Press @100,100 100x50');
     expect(lines[3]).toBe('  [e3] AXTextField = "abc" actions=Confirm @0,200 200x25');
     expect(r.structured).toMatchObject({ window: { id: 11 }, count: 3, truncated: false });
+    // Claude Code shows structuredContent and may drop the text: the tree lines must be in both,
+    // and the text must end with the JSON summary.
+    expect(lines.at(-1)).toMatch(/^\{"window":.*"count":3,"truncated":false\}$/);
+    expect(r.structured?.tree).toContain('[e2] AXButton "保存" actions=Press @100,100 100x50');
+    expect(r.structured?.tree).toBe(lines.slice(0, -1).join("\n"));
     // ax_tree set the coordinates: a click on the button's pixels lands on its points, in the background.
     await call("left_click", { coordinate: [150, 125] });
     expect(ops("click")[0]).toMatchObject({ x: 400, y: 300, window: 11 });

@@ -76,7 +76,7 @@ CLI のセッション（Claude Code / Codex / agy）から、macOS のアプリ
 |---|---|---|
 | `list_windows` | — | 承認されたアプリのウィンドウを、どこにあっても挙げる。`id`・`title`・`app`・`bundleId`・`x/y/width/height`（ポイント）・`onScreen`・`minimized`・`hidden`・`capturable`・`display` |
 | `screenshot` | `window`（任意。id か、タイトル・アプリ名の一部）、`mode`（`window` 既定 / `screen`） | `window` モード: ウィンドウを 1 枚だけ撮る。`window` を省くと、直前のウィンドウ、無ければ入力できるアプリの撮れるウィンドウの最初。画像と `{ mode, width, height, window, otherWindows }` |
-| `ax_tree` | `window`、`scope`（`window` 既定 / `menubar`）、`max_depth`（既定 25）、`max_nodes`（既定 400、最大 2000）、`all` | AX の木を 1 行 1 要素の文字で返す: `[e8] AXButton (7) #Seven actions=Press @20,374 96x96`（位置と大きさはウィンドウの画像の画素）。言うことの無い入れ物（AXGroup など）は `all` でなければ飛ばす。値は 500 文字で切り、パスワード欄（`AXSecureTextField`）の値は出さない |
+| `ax_tree` | `window`、`scope`（`window` 既定 / `menubar`）、`max_depth`（既定 25）、`max_nodes`（既定 400、最大 2000）、`all` | AX の木を 1 行 1 要素の文字で返す: `[e8] AXButton (7) #Seven actions=Press @20,374 96x96`（位置と大きさはウィンドウの画像の画素）。木は text と `structuredContent.tree` の両方に入れる（Claude Code は `structuredContent` があると text を捨てる。syn-8）。text の末尾はサマリ JSON 1 行。言うことの無い入れ物（AXGroup など）は `all` でなければ飛ばす。値は 500 文字で切り、パスワード欄（`AXSecureTextField`）の値は出さない |
 | `ax_press` | `ref` | AXPress |
 | `ax_set_value` | `ref`、`value`（文字か数） | AXValue を書く。いまの値が数なら数にする |
 | `ax_perform` | `ref`、`action` | `actions` にあるもの（`AXConfirm`、`AXIncrement`、`AXDecrement`、`AXShowMenu`、`AXCancel`、`AXPick`…。`AX` は省いてよい）。`AXRaise` は前に出すので断る |

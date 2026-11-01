@@ -700,9 +700,13 @@ export function createDesktopToolHandler(options: DesktopServerOptions) {
     const head = `window ${win.id} ${JSON.stringify(win.title)} (${win.app})${g ? ` ${g.width}x${g.height} px` : ""} scope=${t.scope}`;
     const lines = t.nodes.map((n) => axLine(n, g));
     const tail = t.truncated ? ["… truncated: raise max_nodes / max_depth, or read a smaller part"] : [];
+    // Claude Code shows structuredContent and drops the text block when both exist, so the tree goes
+    // in both: the text is the tree plus one JSON summary line, and structuredContent carries it as `tree`.
+    const summary = { window: brief(win), scope: t.scope, count: t.nodes.length, truncated: t.truncated };
+    const tree = [head, ...lines, ...tail].join("\n");
     return {
-      content: [{ type: "text", text: [head, ...lines, ...tail].join("\n") }],
-      structuredContent: { window: brief(win), scope: t.scope, count: t.nodes.length, truncated: t.truncated },
+      content: [{ type: "text", text: `${tree}\n${JSON.stringify(summary)}` }],
+      structuredContent: { ...summary, tree },
     };
   }
 
