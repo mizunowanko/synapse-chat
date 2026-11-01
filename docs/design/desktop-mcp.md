@@ -116,11 +116,11 @@ menu bar だけのアプリ（`LSUIElement`）。`~/Library/Application Support/
 
 | op | |
 |---|---|
-| `status` | 版、pid、`accessibility`（`AXIsProcessTrusted`）、`screenRecording`（`CGPreflightScreenCaptureAccess`）、`escWatcher`、いまのセッション |
-| `requestPermissions` | 2 つの権限のダイアログを出す |
+| `status` | 版、pid、`accessibility`（`AXIsProcessTrusted`）、`screenRecording`（`CGPreflightScreenCaptureAccess`）、`inputMonitoring`（`CGPreflightListenEventAccess`）、`escWatcher`、いまのセッション |
+| `requestPermissions` | 3 つの権限のダイアログを出す |
 | `listApps` / `resolveApps` | 動いているアプリと最前面、名前 → bundle id |
 | `beginSession` / `endSession` | ロックを取り、見てよいアプリ（`apps`）と操作してよいアプリ（`inputApps`、`apps` の部分集合）と期限を置く |
-| `screenshot` | ScreenCaptureKit。`SCContentFilter(display:including:)` に**承認されたアプリだけ**を渡すので、ほかのウィンドウ・壁紙・Dock・メニューバーはウィンドウサーバーの段階で写らない |
+| `screenshot` | ScreenCaptureKit。`SCContentFilter(display:including:)` に**承認されたアプリだけ**を渡すので、ほかのウィンドウ・壁紙・Dock・メニューバーはウィンドウサーバーの段階で写らない。承認されたアプリのウィンドウがメインディスプレイに 1 枚も出ていなければ `no-window`（下） |
 | `openApp` / `cursor` / `click` / `move` / `mouseDown` / `mouseUp` / `drag` / `scroll` / `key` / `type` | CGEvent |
 
 ### helper が確かめること
@@ -128,19 +128,27 @@ menu bar だけのアプリ（`LSUIElement`）。`~/Library/Application Support/
 - **1 セッションだけ**: `beginSession` は、別のセッションがロックを持ち、その接続が生きていて期限内なら `locked`（`holder` 付き）。ロックは `endSession`・接続が切れたとき・Esc で外れる。MCP サーバーは自分のセッション id（UUID）を毎回送る
 - **入力の前に**: クリック・スクロール・ドラッグは、その点の一番手前のウィンドウの持ち主が `inputApps` にあるか。キーと文字は最前面のアプリが `inputApps` にあるか。違えば `not-allowed`（`app` 付き）。期限切れは `expired`
 - **Esc**: listen-only の CGEventTap でキーを見て、ユーザーの Esc でセッションを捨て、`aborted` を送る。helper が送るイベントには印（`eventSourceUserData`）を付けてあるので、エージェントが `key Escape` を押しても止まらない。Esc はアプリにもそのまま届く（奪わない）。止めたセッションの次のリクエストには `aborted` を返す
-- **権限**: アクセシビリティが無いと入力は `permission`。Esc の見張り（イベントタップ）もアクセシビリティが要るので、見張りが動いていないあいだは入力を断る（止める手段が無いまま操作させない）。画面収録が無いと `screenshot` は `permission`
+- **権限**: 3 つ要る。アクセシビリティ（入力）、画面収録（`screenshot`）、入力監視（Esc の見張り）。アクセシビリティが無いと入力は `permission`（`permission: "accessibility"`）。Esc の見張りはキーボードのイベントタップで、**macOS 26 ではアクセシビリティだけでは作れず入力監視（`kTCCServiceListenEvent`）が要る**（listen-only でも能動のタップでも同じ。syn-6 で確かめた）。見張りが動いていないあいだは入力を断る（`permission: "inputMonitoring"`。止める手段が無いまま操作させない）。画面収録が無いと `screenshot` は `permission`（`permission: "screenRecording"`）
+- **写すウィンドウが無い**: 承認されたアプリのウィンドウが、メインディスプレイにいま出ていない（別の操作スペース、フルスクリーンの別スペース、最小化、隠す、別のディスプレイ）と、ウィンドウサーバーは空の画像ではなく `SCStreamErrorDomain -3811`（internalError）で失敗する。権限の問題に見えるが違う（syn-6）。helper は撮る前に `SCShareableContent` の on-screen のウィンドウを見て、無ければ `no-window`（`apps` 付き）で断る。確かめたあとに消えたときの ScreenCaptureKit の失敗は `capture-failed`（`code` 付き）
 - メニューバー: セッション中は赤い ●、ほかは ○。メニューに状態・「停止（Esc）」・権限の状態・「権限を求める…」・「終了」
 
 ### ビルド
 
 ```bash
-packages/mcp/desktop-helper/build.sh            # release。--debug、--out <dir>
-# → packages/mcp/desktop-helper/build/SynapseDesktopHelper.app（ad hoc 署名、bundle id com.mizunowanko.synapse-desktop-helper）
+packages/mcp/desktop-helper/build.sh            # release。--debug、--out <dir>、--sign <identity>
+# → packages/mcp/desktop-helper/build/SynapseDesktopHelper.app（bundle id com.mizunowanko.synapse-desktop-helper）
+
+# 証明書で署名する（権限がビルドし直しても残る）
+packages/mcp/desktop-helper/build.sh --sign "Apple Development: …"
+SYNAPSE_DESKTOP_SIGN_IDENTITY="Apple Development: …" packages/mcp/desktop-helper/build.sh   # 同じ
 ```
 
-`swift build -c release` → `.app` の組み立て（`Info.plist`、`LSUIElement`、macOS 14 以上）→ `codesign --force --sign -`。`/Applications` には入れない。権限（システム設定 → プライバシーとセキュリティ → アクセシビリティ・画面収録）は人が手で付ける。
+`swift build -c release` → `.app` の組み立て（`Info.plist`、`LSUIElement`、macOS 14 以上）→ `codesign`。`/Applications` には入れない。権限（システム設定 → プライバシーとセキュリティ → アクセシビリティ・画面収録・入力監視）は人が手で付ける。
 
-- **ad hoc 署名なので、ビルドし直すと権限を付け直す。** TCC は署名（ad hoc ではバイナリのハッシュ）に権限を結ぶ。置き場所を決めたら、そこへコピーしてから権限を付ける
+- **署名**: `--sign <identity>`（無ければ環境変数 `SYNAPSE_DESKTOP_SIGN_IDENTITY`）があれば、その証明書で `codesign --force --sign <identity> --timestamp=none --identifier com.mizunowanko.synapse-desktop-helper`。identity は `security find-identity -v -p codesigning` に出る名前（`Apple Development: <名前> (<ID>)`）か SHA-1。hardened runtime も entitlements も付けない（公証しないし、要らない）。どちらも無ければ従来どおり ad hoc（`--sign -`）で、その旨を stderr に出す
+- **TCC は署名の designated requirement に権限を結ぶ。** 証明書で署名すると要件は `identifier "com.mizunowanko.synapse-desktop-helper" and anchor apple generic and certificate leaf[subject.CN] = "…"` になり、**同じ identity でビルドし直しても権限が残る**（`codesign -d -r- <app>` で確かめられる）。ad hoc では要件が cdhash になり、ビルドし直すたびに 3 つの権限を付け直す
+- ad hoc から証明書の署名に変えたとき（と identity を変えたとき）は、システム設定の 3 か所で helper を一度消して入れ直す
+- 置き場所を決めたら、そこへコピーしてから権限を付ける（例: `~/Applications/SynapseDesktopHelper.app`）
 - npm のパッケージには入らない（`files` は `dist` と `src`）
 
 ### MCP サーバーからの起動
@@ -176,7 +184,14 @@ node …/dist/desktop/cli.js status [--socket <path>] [--helper-app <app>]     #
 
 helper は `swift build` が通ることと、`synapse-desktop status --socket /tmp/x.sock --helper-app <app>` で `open` 起動・socket の応答・`SIGTERM` で socket が消えることを見た（2026-11-01）。権限の無い helper に実の MCP サーバーから `request_access` → `screenshot` / `key` を送り、`permission` で断られることも見た。
 
-**まだ見ていないもの**: 権限を付けた helper での実際のスクリーンショット（承認されていないアプリが写らないこと）、クリック・キー入力、Esc での中止、メニューバーの表示。権限を付けてから、TextEdit などで確かめる。
+2026-11-01（syn-6）、Apple Development の証明書で署名し 3 つの権限を付けた helper（`~/Applications/`、macOS 26）に socket から `status` → `beginSession`（計算機だけ）→ `screenshot` → `endSession` を送り、次を見た:
+
+- 返った PNG（1456×946）と `region` 付きの JPEG に、計算機のウィンドウだけが写り、ほかのウィンドウ・壁紙・メニューバーが写らない
+- 計算機を隠すと `no-window`、前に出すと撮れる（同じプロセスのまま。修正前はここで `-3811`）
+- 同じ identity でビルドし直して置き換えても、`accessibility` / `screenRecording` / `inputMonitoring` / `escWatcher` が true のまま
+- 入力監視が無いと `escWatcher` が false（アクセシビリティがあっても）
+
+**まだ見ていないもの**: クリック・キー入力、Esc での中止、メニューバーの表示、複数のアプリを承認したときの写り方。
 
 ## 段 1 でやらないこと
 

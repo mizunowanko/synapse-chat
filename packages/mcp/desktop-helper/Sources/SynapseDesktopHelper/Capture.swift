@@ -4,6 +4,11 @@
 // applications: every other window (and the wallpaper, the Dock, the menu
 // bar) is left out of the image by the window server, not blacked out
 // afterwards. The main display only (phase 1).
+//
+// When none of the allowed apps has a window on screen there (another Space,
+// minimized, hidden, another display), the window server fails the capture
+// with SCStreamErrorDomain -3811 instead of returning an empty image, so that
+// case is refused up front as `no-window` (syn-6).
 import AppKit
 import CoreGraphics
 import ImageIO
@@ -45,7 +50,6 @@ enum Capture {
             throw HelperError("no-display", "No display to capture.")
         }
         let included = content.applications.filter { apps.contains($0.bundleIdentifier) }
-        let filter = SCContentFilter(display: display, including: included, exceptingWindows: [])
 
         let bounds = CGDisplayBounds(display.displayID)  // global points
         var src = CGRect(origin: .zero, size: bounds.size)  // display-local points
@@ -55,6 +59,18 @@ enum Capture {
                 throw HelperError("bad-request", "The region is outside the display.")
             }
         }
+        // SCWindow.frame is in global points, like CGDisplayBounds.
+        let visible = content.windows.filter { w in
+            guard let bid = w.owningApplication?.bundleIdentifier, apps.contains(bid), w.isOnScreen else { return false }
+            return w.frame.intersects(bounds)
+        }
+        if visible.isEmpty {
+            throw HelperError(
+                "no-window",
+                "None of the allowed apps (\(apps.sorted().joined(separator: ", "))) has a window on the main display right now: it may be on another Space, minimized, hidden or on another display. Bring it to the front (e.g. open_application) and take the screenshot again.",
+                extra: ["apps": apps.sorted()])
+        }
+        let filter = SCContentFilter(display: display, including: included, exceptingWindows: [])
         let backing = Double(filter.pointPixelScale)
         let nativeW = Double(src.width) * backing
         let nativeH = Double(src.height) * backing
@@ -68,7 +84,14 @@ enum Capture {
         config.sourceRect = src
         config.showsCursor = false
         config.capturesAudio = false
-        let image = try blocking { try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) }
+        let image: CGImage
+        do {
+            image = try blocking { try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) }
+        } catch let e as NSError where e.domain == SCStreamErrorDomain {
+            // Not `internal`: the window can vanish between the check above and
+            // the capture (Space switch, minimize), which is worth a retry.
+            throw HelperError("capture-failed", "ScreenCaptureKit could not take the screenshot (\(e.domain) \(e.code)). Make sure an allowed app's window is on screen on the main display and try again.", extra: ["code": e.code])
+        }
 
         let jpeg = o.format == "jpeg"
         let data = NSMutableData()

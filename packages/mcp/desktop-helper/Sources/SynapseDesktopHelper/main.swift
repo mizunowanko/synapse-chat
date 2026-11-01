@@ -83,7 +83,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stopItem.isEnabled = s != nil
         let ax = AXIsProcessTrusted() ? "可" : "不可"
         let sr = CGPreflightScreenCaptureAccess() ? "可" : "不可"
-        permItem.title = "アクセシビリティ: \(ax) / 画面収録: \(sr) / Esc: \(EscWatcher.shared.installed ? "有効" : "無効")"
+        let im = CGPreflightListenEventAccess() ? "可" : "不可"
+        permItem.title = "アクセシビリティ: \(ax) / 画面収録: \(sr) / 入力監視: \(im) / Esc: \(EscWatcher.shared.installed ? "有効" : "無効")"
     }
 
     @objc func stop() { abort(by: "menu") }
@@ -92,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(opts)
         if !CGPreflightScreenCaptureAccess() { _ = CGRequestScreenCaptureAccess() }
+        if !CGPreflightListenEventAccess() { _ = CGRequestListenEventAccess() }
         refresh()
     }
 

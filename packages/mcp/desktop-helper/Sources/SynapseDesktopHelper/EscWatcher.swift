@@ -2,8 +2,9 @@
 // reaches the app as usual and also aborts the session; our own Escape (an
 // event carrying `inputMarker`) does not abort.
 //
-// A keyboard event tap needs Accessibility (or Input Monitoring). Without it
-// `install()` fails, and is retried at the next `beginSession` / status.
+// A keyboard event tap needs Input Monitoring (kTCCServiceListenEvent). On
+// macOS 26 Accessibility alone is not enough, even for an active tap. Without
+// it `install()` fails, and is retried at the next `beginSession` / status.
 import CoreGraphics
 import Foundation
 
