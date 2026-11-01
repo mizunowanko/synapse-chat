@@ -17,6 +17,7 @@ packages/
                                     + 指示書を同じ SQLite から起動時に配る（`./instructions`、bin `synapse-instructions`。docs/design/instructions.md）
                                     + MCP サーバーの台帳（`./mcp-servers`、bin `synapse-mcp-servers`。docs/design/mcp-servers.md）
                                     + セッション間のメッセージを中継する MCP サーバー（`./peers`、bin `synapse-peers`。docs/design/peers-mcp.md）
+                                    + macOS のデスクトップを見て操作する MCP サーバー（`./desktop`、bin `synapse-desktop`。Swift の helper は `packages/mcp/desktop-helper/`。docs/design/desktop-mcp.md）
 apps/
   example/  @synapse-chat/example — Vite + React + ws の動作サンプル（非公開）
 docs/       プロトコル仕様・Adapter ガイド・design doc（docs/design/）
