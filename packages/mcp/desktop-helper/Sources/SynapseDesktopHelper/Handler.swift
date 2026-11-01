@@ -4,7 +4,7 @@
 //
 // | op                 | params                                             | result |
 // |--------------------|----------------------------------------------------|--------|
-// | status             | —                                                  | version, permissions, session |
+// | status             | —                                                  | version, permissions (accessibility, screenRecording, inputMonitoring), escWatcher, session |
 // | requestPermissions | —                                                  | same as status (after prompting) |
 // | listApps           | —                                                  | {apps, frontmost} |
 // | resolveApps        | apps: [name or bundle id]                          | {apps: [{query, bundleId, name, path}]} |
@@ -62,6 +62,7 @@ final class Handler {
             let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(opts)
             if !CGPreflightScreenCaptureAccess() { _ = CGRequestScreenCaptureAccess() }
+            if !CGPreflightListenEventAccess() { _ = CGRequestListenEventAccess() }
             return status()
         case "listApps":
             return ["apps": Apps.running(), "frontmost": Apps.frontmost().map(Apps.describe) ?? NSNull()]
@@ -122,7 +123,7 @@ final class Handler {
     // MARK: - status and session
 
     func status() -> JSON {
-        if !EscWatcher.shared.installed && AXIsProcessTrusted() {
+        if !EscWatcher.shared.installed && CGPreflightListenEventAccess() {
             DispatchQueue.main.sync { _ = EscWatcher.shared.install() }
         }
         var o: JSON = [
@@ -132,6 +133,8 @@ final class Handler {
             "bundlePath": Bundle.main.bundlePath,
             "accessibility": AXIsProcessTrusted(),
             "screenRecording": CGPreflightScreenCaptureAccess(),
+            // The Esc watcher's event tap needs it (EscWatcher.swift).
+            "inputMonitoring": CGPreflightListenEventAccess(),
             "escWatcher": EscWatcher.shared.installed,
         ]
         if let s = sessions.session {
@@ -174,7 +177,7 @@ final class Handler {
             throw HelperError("permission", "Accessibility is not granted to the desktop helper.", extra: ["permission": "accessibility"])
         }
         guard EscWatcher.shared.installed else {
-            throw HelperError("permission", "The Esc watcher is not running (needs Accessibility), so input is refused.", extra: ["permission": "accessibility"])
+            throw HelperError("permission", "The Esc watcher is not running (needs Input Monitoring), so input is refused.", extra: ["permission": "inputMonitoring"])
         }
         return s
     }

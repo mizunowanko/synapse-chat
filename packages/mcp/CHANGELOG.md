@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.10.1
+
+### Patch Changes
+
+- desktop の helper を直した（syn-6）。`build.sh` に `--sign <identity>`（環境変数 `SYNAPSE_DESKTOP_SIGN_IDENTITY`）を足し、証明書で署名すると designated requirement が証明書ベースになって、ビルドし直してもアクセシビリティ・画面収録・入力監視の権限が残る（無ければ従来どおり ad hoc）。承認されたアプリのウィンドウがメインディスプレイに出ていない（別の操作スペース・最小化・隠す）と ScreenCaptureKit が `SCStreamErrorDomain -3811` で失敗していたのを、撮る前に確かめて `no-window` で断るようにした（そのあとの失敗は `capture-failed`）。Esc の見張りのイベントタップは macOS 26 では入力監視が要るので、`status` に `inputMonitoring` を出し、`requestPermissions` とメニューで入力監視も求め、見張りが無いときの入力の断りを `permission: "inputMonitoring"` にした。
+
 ## 0.10.0
 
 ### Minor Changes

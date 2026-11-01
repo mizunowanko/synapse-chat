@@ -106,6 +106,8 @@ export interface HelperStatus {
   readonly socket: string;
   readonly accessibility: boolean;
   readonly screenRecording: boolean;
+  /** Input Monitoring: the Esc watcher's keyboard event tap needs it. Absent on older helpers. */
+  readonly inputMonitoring?: boolean;
   readonly escWatcher: boolean;
   readonly session: { id: string; apps: string[]; inputApps: string[]; expiresAt: number | null } | null;
 }
