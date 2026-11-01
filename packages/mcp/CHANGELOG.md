@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.11.1
+
+### Patch Changes
+
+- desktop の `ax_tree` の結果が Claude Code でサマリの JSON だけになり、木の行がモデルに届かなかったのを直す（syn-8）。Claude Code は `structuredContent` があると text を捨てるので、木を `structuredContent.tree` にも入れ、text は「木の行 + サマリ JSON 1 行」にした。
+
 ## 0.11.0
 
 ### Minor Changes
