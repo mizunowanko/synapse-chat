@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.10.0
+
+### Minor Changes
+
+- macOS のデスクトップを見て操作する stdio の MCP サーバー `@synapse-chat/mcp/desktop`（bin `synapse-desktop`）と、権限を持つネイティブの helper（`packages/mcp/desktop-helper/`、Swift。`build.sh` で ad hoc 署名の `.app` にビルドする。npm のパッケージには入らない）を追加した（agents-familia agt-277 段 1）。ツールは Anthropic の computer use に寄せた `request_access` / `list_granted_applications` / `screenshot` / 各種クリック / `mouse_move` / `left_click_drag` / `scroll` / `key` / `type` / `open_application` / `cursor_position` / `wait` / `zoom`。許可はサーバーが決めず、アプリが実装する承認 API（`POST /api/desktop/access`・`GET /api/desktop/access/<requestId>?waitMs=`、型は `contract.ts`）に `--api` / `--desk-id` で聞く。ブラウザは常に見るだけ、期限切れは全部断る。helper は承認されたアプリのウィンドウだけを ScreenCaptureKit で撮り、入力の前に対象のアプリを確かめ、1 セッションだけのロックを持ち、Esc で中止する。座標は直前のスクリーンショットの画素。
+
 ## 0.9.0
 
 ### Minor Changes

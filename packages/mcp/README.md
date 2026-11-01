@@ -161,6 +161,25 @@ synapse-peers register claude --api http://127.0.0.1:8123 --token t --log /abs/p
 
 The contract, the annotations, per-CLI measurements and traps (agy needs `--dangerously-skip-permissions`; two agy launches in one cwd can swap tokens): [`docs/design/peers-mcp.md`](../../docs/design/peers-mcp.md).
 
+## Desktop (`@synapse-chat/mcp/desktop`, `synapse-desktop`)
+
+A stdio MCP server, one per CLI session, that lets the session see and operate macOS apps with tools close to Anthropic's computer-use set (`request_access`, `screenshot`, `left_click` … `type`, `zoom`). The screen and the input belong to a native helper (`desktop-helper/`, a menu-bar `.app` built by `desktop-helper/build.sh`, not shipped in the npm package) that owns the Accessibility / Screen Recording permissions, captures only the granted apps' windows (ScreenCaptureKit), checks every event against the grant, holds a single-session lock and aborts on Esc. The server never decides permission: `request_access` asks an approval API the app implements (`POST /api/desktop/access`, `GET /api/desktop/access/<requestId>?waitMs=`; types in `contract.ts`) and keeps what a person granted until it expires. Browsers are always screenshot-only. Coordinates are in the last screenshot's pixels.
+
+```ts
+import { claudeDesktopMcpServers, codexDesktopConfigArgs, agyDesktopPluginFiles } from "@synapse-chat/mcp/desktop";
+const desktop = { api: "http://127.0.0.1:8001", deskId }; // + token?, socket?, helperApp?, log?
+// claude: claudeMcpConfigArgs(claudeDesktopMcpServers(desktop), yourServers)
+// codex:  [...codexDesktopConfigArgs(desktop), ...yourArgs]
+// agy:    write agyDesktopPluginFiles(desktop) under the cwd (.agents/plugins/synapse-desktop/)
+```
+
+```bash
+packages/mcp/desktop-helper/build.sh        # → packages/mcp/desktop-helper/build/SynapseDesktopHelper.app (ad hoc signed)
+synapse-desktop status                      # ask the helper (starts it with `open -g -a` if the socket is missing)
+```
+
+The approval contract, the helper protocol, the build and what is verified: [`docs/design/desktop-mcp.md`](../../docs/design/desktop-mcp.md).
+
 ## Design notes
 
 - **Input schemas are JSON Schema.** No Zod / TypeBox lock-in. The MCP SDK accepts JSON Schema verbatim, and this keeps the door open for OpenAPI → MCP generation.
