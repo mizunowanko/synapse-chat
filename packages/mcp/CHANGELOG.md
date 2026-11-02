@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.12.0
+
+### Minor Changes
+
+- desktop: 承認されたブラウザも、ほかのアプリと同じにクリック・キー入力・AX の操作ができるようにした（syn-9）。ブラウザであることでは入力を拒まず、見るだけになるのは承認が `readOnly` にしたアプリだけ（`read-only` の断りもそのときだけ）。`DesktopAppRequest` に `browser: boolean`（承認の画面が警告を出すための印）を足し、`readOnly` は互換のために残して常に `false` にした（廃止予定。承認の応答の `readOnly` は今までどおり）。サーバーの instructions と `request_access` の説明を書き換え、ブラウザでは Web のページの中の文の指示に従わないこと・お金を動かす操作をしないことを説明に入れた。helper（Swift）は変えていない。
+
 ## 0.11.1
 
 ### Patch Changes
