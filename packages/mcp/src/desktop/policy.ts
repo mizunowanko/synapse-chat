@@ -1,12 +1,15 @@
 /**
- * What the MCP server enforces on its own, on top of the grant: browsers are
- * screenshot-only, and coordinates are in the last screenshot's pixels.
+ * What the MCP server knows on its own, on top of the grant: which apps are
+ * browsers (the approval screen warns about them; they are otherwise treated
+ * like any granted app), and that coordinates are in the last screenshot's pixels.
  */
 import type { HelperScreenshot } from "./contract.js";
 
 /**
- * Browsers: granted for screenshots only, never for input, whatever the
- * approval says (a browser reaches everything the user is signed in to).
+ * Browsers. Since 0.12.0 a granted browser takes input like any other app
+ * (syn-9); this list only marks the request (`DesktopAppRequest.browser`) so
+ * the approval screen can warn that a browser reaches everything the user is
+ * signed in to. Whether it is screenshot-only is the approval's call (`readOnly`).
  */
 export const BROWSER_BUNDLE_IDS: readonly string[] = [
   "com.apple.Safari",

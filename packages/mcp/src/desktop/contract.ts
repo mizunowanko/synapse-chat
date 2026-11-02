@@ -26,7 +26,13 @@ export interface DesktopAppRequest {
   readonly query: string;
   readonly bundleId: string | null;
   readonly name: string | null;
-  /** Screenshot-only whatever is granted (browsers): the approval UI may say so. */
+  /** The app is a web browser: the approval UI should warn (it reaches everything the user is signed in to). Browsers take input like any granted app. */
+  readonly browser: boolean;
+  /**
+   * @deprecated Always `false` since 0.12.0 (it used to be `true` for browsers).
+   * Screenshot-only is now decided by the approval alone, through
+   * {@link DesktopAccessState.readOnly}; use `browser` to mark browsers.
+   */
   readonly readOnly: boolean;
 }
 
@@ -45,7 +51,7 @@ export interface DesktopAccessState {
   readonly status: DesktopAccessStatus;
   /** `granted`: the bundle ids granted (a subset of those asked; anything else is dropped). */
   readonly apps?: readonly string[];
-  /** `granted`: bundle ids granted for screenshots only (on top of the browsers, which are always). */
+  /** `granted`: bundle ids granted for screenshots only (the person's choice at approval; browsers are not read-only by default). */
   readonly readOnly?: readonly string[];
   /** `granted`: when the grant ends, ISO 8601. Required: a grant without an end is refused. */
   readonly expiresAt?: string;
@@ -78,7 +84,7 @@ export type DesktopLocalReason =
   | "expired"
   /** The user pressed Esc / Stop. */
   | "aborted"
-  /** The app is screenshot-only (a browser, or marked readOnly). */
+  /** Every granted app was approved as screenshot-only (`readOnly` in the approval). */
   | "read-only"
   /** The app was not granted. */
   | "not-allowed"
