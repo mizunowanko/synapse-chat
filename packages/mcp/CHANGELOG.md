@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.13.0
+
+### Minor Changes
+
+- skills: スキルの出どころの interface `SkillSource`（`list` / `resolve` / `files` / `put`）を足し、`createSkillsToolHandler` / `createSkillsMcpServer` の `store` が `SkillStore` 以外の実装も受け取れるようにした（agt-340）。`SkillStore` はそのまま `SkillSource` を満たし、ツールの名前・引数・返す文は変わらない。
+
 ## 0.12.0
 
 ### Minor Changes
