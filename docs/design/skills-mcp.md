@@ -7,6 +7,7 @@
 | 部品 | ファイル | |
 |---|---|---|
 | 置き場所 | `store.ts` | `SkillStore`。SQLite（`node:sqlite`） |
+| スキルの出どころ | `source.ts` | `SkillSource`（`list` / `resolve` / `files` / `put`）。サーバーが使うのはこれだけ |
 | 階層と書き込みの規則 | `scope.ts` | `visibleScopes()` / `mcpWriteRefusal()` |
 | 付属ファイルの書き出し | `materialize.ts` | `~/.cache/synapse-skills/<skill>@<版>/` |
 | MCP サーバー | `server.ts` | `list_skills` / `get_skill` / `put_skill`、instructions |
@@ -95,6 +96,14 @@ node …/dist/skills/cli.js serve --db /abs/skills.db --agent Tsukuyo [--desk-id
 DB は消すと戻らないデータなので data の場所、書き出しは何度でも作り直せるので cache の場所。どちらも repo の外なので commit されない。**アプリは DB を必ず絶対パスで渡す**（登録の関数は相対パスを拒否する）。CLI ごとにサーバーの cwd が違う（agy は plugin のディレクトリ）ので、相対パスは当てにならない。
 
 SQLite は WAL・`busy_timeout = 5000`。セッションの数だけサーバーが同じファイルを開く。版の採番は `BEGIN IMMEDIATE` の中でやるので、2 つのセッションが同時に書いても同じ版番号にならない。
+
+### 出どころを差し替える（agt-340）
+
+`createSkillsToolHandler` / `createSkillsMcpServer` の `store` は `SkillSource` を受け取る。`SkillStore` はそのまま `SkillSource` で、ほかの置き場所に持つアプリは自分の実装を渡せる（stdio のサーバーは自分で建てる。bin の `synapse-skills serve` は `SkillStore` だけ）。ツールの名前・引数・返す文は出どころによらない。実装が守ること:
+
+- `list` は見える名前ごとに 1 件（下の階層が勝つ）、名前の順。instructions にも使う
+- `files` は `get_skill` が `<cacheRoot>/<name>@<version>/` に書き出す。同じ `(name, version)` はいつも同じ付属ファイルであること
+- `put` の書き込み先は、サーバーが規則（`mcpWriteRefusal`）を通した自分のエージェント・Desk の階層だけ。省かれた `description` / `files` は、その名前でいま見えているものを引き継ぐ。中身が同じなら `changed: false`
 
 ## モデルにスキルを知らせる
 

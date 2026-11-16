@@ -22,13 +22,15 @@ import {
   type SkillScope,
   type SkillViewer,
 } from "./scope.js";
-import type { SkillFile, SkillRecord, SkillStore } from "./store.js";
+import type { SkillSource } from "./source.js";
+import type { PutSkillInput, SkillFile, SkillRecord } from "./store.js";
 
 export const SKILLS_SERVER_NAME = "skills";
 export const SKILLS_SERVER_VERSION = "1";
 
 export interface SkillsServerOptions {
-  readonly store: SkillStore;
+  /** Where skills come from: a `SkillStore`, or any other `SkillSource`. */
+  readonly store: SkillSource;
   /**
    * Who this session is. `{ agent: "", desk: "" }` sees only the everyone tier and cannot write.
    * `desk` is the desk's key (its id); `legacyDesk` the name its older rows are keyed on (read only).
@@ -205,7 +207,7 @@ export function createSkillsToolHandler(options: SkillsServerOptions) {
         }
       }
 
-      const input: Parameters<SkillStore["put"]>[1] = {
+      const input: PutSkillInput = {
         name: skillName,
         body,
         author: `mcp:${viewer.agent}${viewer.desk ? `/${viewer.desk}` : ""}`,

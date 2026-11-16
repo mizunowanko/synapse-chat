@@ -28,6 +28,7 @@ export {
   type PutSkillInput,
   type PutSkillResult,
 } from "./store.js";
+export type { SkillSource } from "./source.js";
 export { materializeSkill, defaultCacheRoot, type MaterializedSkill } from "./materialize.js";
 export {
   createSkillsMcpServer,
