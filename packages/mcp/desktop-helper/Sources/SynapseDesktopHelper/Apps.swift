@@ -2,6 +2,7 @@
 // resolving a name to a bundle id, and opening one (NSWorkspace).
 import AppKit
 import CoreGraphics
+import ApplicationServices
 
 enum Apps {
     static func describe(_ app: NSRunningApplication) -> JSON {
@@ -21,12 +22,33 @@ enum Apps {
         NSWorkspace.shared.frontmostApplication
     }
 
-    /// The owner of the frontmost on-screen window containing `point` (global
-    /// points, top-left origin, the coordinate space CGEvent uses).
+    /// The app that gets a click at `point` (global points, top-left origin, the coordinate space CGEvent uses).
+    ///
+    /// Asks the accessibility hit test first: it answers with what is really under the point (a Dock tile is the Dock,
+    /// the rest of the screen is the window below). The window list alone is not enough: the Dock keeps a
+    /// full-display window at layer 20 on screen, so every point of the main display would be "Dock".
     static func owner(at point: CGPoint) -> (bundleId: String?, name: String?, pid: pid_t)? {
+        if let pid = axOwner(at: point) {
+            let app = NSRunningApplication(processIdentifier: pid)
+            return (app?.bundleIdentifier, app?.localizedName, pid)
+        }
+        return windowOwner(at: point)
+    }
+
+    private static func axOwner(at point: CGPoint) -> pid_t? {
+        var el: AXUIElement?
+        guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y), &el) == .success,
+              let el else { return nil }
+        var pid: pid_t = 0
+        return AXUIElementGetPid(el, &pid) == .success && pid > 0 ? pid : nil
+    }
+
+    /// The owner of the frontmost on-screen window containing `point`, skipping the Dock's full-display window.
+    static func windowOwner(at point: CGPoint) -> (bundleId: String?, name: String?, pid: pid_t)? {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return nil
         }
+        let displays = activeDisplayBounds()
         for w in list {
             guard let b = w[kCGWindowBounds as String] as? NSDictionary,
                   let rect = CGRect(dictionaryRepresentation: b),
@@ -34,9 +56,19 @@ enum Apps {
             if let alpha = w[kCGWindowAlpha as String] as? Double, alpha <= 0 { continue }
             guard let pid = w[kCGWindowOwnerPID as String] as? Int32 else { continue }
             let app = NSRunningApplication(processIdentifier: pid)
+            let layer = (w[kCGWindowLayer as String] as? Int) ?? 0
+            if app?.bundleIdentifier == "com.apple.dock", layer > 0, displays.contains(where: { $0 == rect }) { continue }
             return (app?.bundleIdentifier, app?.localizedName ?? (w[kCGWindowOwnerName as String] as? String), pid)
         }
         return nil
+    }
+
+    private static func activeDisplayBounds() -> [CGRect] {
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        guard CGGetActiveDisplayList(count, &ids, &count) == .success else { return [] }
+        return ids.prefix(Int(count)).map { CGDisplayBounds($0) }
     }
 
     private static let searchDirs: [String] = [
