@@ -72,7 +72,8 @@ export const DESKTOP_INSTRUCTIONS =
   "ax_tree でボタンや入力欄と ref を読む → ax_press / ax_set_value / ax_perform で ref を操作する → ax_tree か screenshot で結果を確かめる。" +
   "AX で届かないときは left_click・key・type を使う。直前の screenshot がウィンドウなら、座標はその画像の画素で、イベントはそのアプリにだけ届き、ポインタは動かず前面にも出ない。" +
   "open_application と screenshot の mode: \"screen\" は人の画面を切り替える前面の操作なので、裏の操作で足りないときだけ使う。" +
-  "ユーザーが Esc を押すと止まり、以後のツールは aborted を返す。そのときは作業をやめ、ユーザーに確かめてから request_access し直す。";
+  "ユーザーが Esc を押すと止まり、以後のツールは aborted を返す。そのときは作業をやめ、ユーザーに確かめてから request_access し直す。" +
+  "操作が終わったら、期限を待たずに release_access で承認を返す（人がその Mac をまた使えるようになり、ほかのセッションも頼めるようになる）。";
 
 const coordinate = {
   type: "array",
@@ -127,6 +128,14 @@ export const DESKTOP_TOOLS: readonly Tool[] = [
       additionalProperties: false,
     },
     annotations: { title: "Request access", ...INPUT },
+  },
+  {
+    name: "release_access",
+    description:
+      "操作が終わったら呼ぶ。いまの承認（と承認待ちの依頼）を、期限を待たずに返す。以後のツールは request_access するまで使えない。" +
+      "承認が無いときに呼んでもよい（何も起きない）。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { title: "Release access", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   {
     name: "list_granted_applications",
@@ -308,6 +317,7 @@ export const DESKTOP_TOOLS: readonly Tool[] = [
 
 const INPUT_TOOLS = new Set(DESKTOP_TOOLS.filter((t) => t.annotations?.readOnlyHint === false).map((t) => t.name));
 INPUT_TOOLS.delete("request_access");
+INPUT_TOOLS.delete("release_access");
 INPUT_TOOLS.delete("open_application");
 
 function ok(value: object): CallToolResult {
@@ -556,6 +566,26 @@ export function createDesktopToolHandler(options: DesktopServerOptions) {
     return ok({ ...grantView(), ...(state.message ? { message: state.message } : {}) });
   }
 
+  /** release_access: end the helper session and drop the grant here, then tell the app (which ends its grant). */
+  async function releaseAccess(): Promise<CallToolResult> {
+    const had = grant ? { requestId: grant.requestId } : pending ? { requestId: pending.requestId } : null;
+    const wasActive = sessionActive || grant !== undefined;
+    grant = undefined;
+    pending = undefined;
+    expired = false;
+    sessionActive = false;
+    geometry = undefined;
+    // Only when this server may hold the session: never start a helper just to end nothing.
+    if (wasActive) await helper.request("endSession", { session: sessionId }).catch(() => undefined);
+    log({ event: "release", requestId: had?.requestId ?? null });
+    if (!approval.release) return ok({ status: "released", released: had !== null });
+    const r = await approval.release(deskId);
+    if (r.ok) return ok({ status: "released", released: r.value.released, ...(r.value.message ? { message: r.value.message } : {}) });
+    // Nothing to give back at the app (or an app without the route): released all the same.
+    if (r.status === 404 || r.status === 409) return ok({ status: "released", released: false, message: r.refusal.error });
+    throw new Refused({ ...r.refusal, localReleased: true });
+  }
+
   function image(s: HelperScreenshot, note: Record<string, unknown>): CallToolResult {
     return {
       content: [
@@ -721,6 +751,8 @@ export function createDesktopToolHandler(options: DesktopServerOptions) {
     switch (name) {
       case "request_access":
         return requestAccess(args);
+      case "release_access":
+        return releaseAccess();
       case "list_granted_applications":
         return ok(grantView());
       case "screenshot":

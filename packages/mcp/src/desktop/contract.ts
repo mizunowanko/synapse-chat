@@ -7,6 +7,9 @@
  *
  *    - `POST {api}/api/desktop/access`              {@link DesktopAccessRequest} → 200 / 201 / 202 {@link DesktopAccessState}
  *    - `GET  {api}/api/desktop/access/{requestId}?waitMs=<n>` → 200 {@link DesktopAccessState}
+ *    - `POST {api}/api/desktop/release`             {@link DesktopReleaseRequest} → 200 {@link DesktopReleaseResult}
+ *      (`release_access`: the session is done with its grant. Optional for the app: a 404 is taken as
+ *      "nothing to release")
  *
  *    The GET may hold the request up to `waitMs` while the state is `pending`
  *    (long poll), and answers `pending` when the time is up; the server asks
@@ -19,6 +22,7 @@
  */
 
 export const DESKTOP_ACCESS_PATH = "/api/desktop/access";
+export const DESKTOP_RELEASE_PATH = "/api/desktop/release";
 
 /** One app the agent asked for, as the helper resolved it. `bundleId` is null when no installed app matched. */
 export interface DesktopAppRequest {
@@ -42,6 +46,19 @@ export interface DesktopAccessRequest {
   readonly apps: readonly DesktopAppRequest[];
   /** The agent's reason, shown to the person who approves. */
   readonly reason: string;
+}
+
+/** `release_access`: the session gives its grant back (and withdraws its waiting request). */
+export interface DesktopReleaseRequest {
+  /** The id the server was started with (`--desk-id`). */
+  readonly deskId: string;
+}
+
+export interface DesktopReleaseResult {
+  /** True when the app ended a grant (or a waiting request) of this session. */
+  readonly released: boolean;
+  /** For the model. */
+  readonly message?: string;
 }
 
 export type DesktopAccessStatus = "pending" | "granted" | "denied" | "expired";

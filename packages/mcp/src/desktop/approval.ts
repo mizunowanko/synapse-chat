@@ -9,9 +9,11 @@ import http from "node:http";
 import https from "node:https";
 import {
   DESKTOP_ACCESS_PATH,
+  DESKTOP_RELEASE_PATH,
   type DesktopAccessRequest,
   type DesktopAccessState,
   type DesktopRefusal,
+  type DesktopReleaseResult,
 } from "./contract.js";
 
 /** How long one `request_access` call waits for the person before answering `pending`. Below Codex's 60 s tool timeout. */
@@ -35,6 +37,11 @@ export interface ApprovalClient {
   get(requestId: string, waitMs: number): Promise<ApprovalResult<DesktopAccessState>>;
   /** GET until the state is not `pending` or `timeoutMs` has passed (then the last `pending`). */
   waitFor(requestId: string, timeoutMs: number): Promise<ApprovalResult<DesktopAccessState>>;
+  /**
+   * `release_access`: give the grant back. Optional so that a hand-written client still fits; without it the server
+   * only ends its own session (the app's grant runs to its end).
+   */
+  release?(deskId: string): Promise<ApprovalResult<DesktopReleaseResult>>;
 }
 
 /** Throws unless `api` is an absolute http(s) URL with no query or fragment. */
@@ -65,6 +72,10 @@ function isState(v: unknown): v is DesktopAccessState {
   if (v.status !== "granted") return true;
   const strings = (a: unknown) => Array.isArray(a) && a.every((s) => typeof s === "string");
   return strings(v.apps) && (v.readOnly === undefined || strings(v.readOnly)) && typeof v.expiresAt === "string" && !Number.isNaN(Date.parse(v.expiresAt));
+}
+
+function isReleaseResult(v: unknown): v is DesktopReleaseResult {
+  return isObject(v) && typeof v.released === "boolean" && (v.message === undefined || typeof v.message === "string");
 }
 
 function unreachable(error: string, detail: string): DesktopRefusal {
@@ -102,7 +113,14 @@ function send(url: URL, method: "GET" | "POST", token: string | undefined, body:
   });
 }
 
-async function call(url: URL, method: "GET" | "POST", token: string | undefined, body: string | undefined, timeoutMs: number) {
+async function call<T>(
+  url: URL,
+  method: "GET" | "POST",
+  token: string | undefined,
+  body: string | undefined,
+  timeoutMs: number,
+  valid: (v: unknown) => v is T,
+): Promise<ApprovalResult<T>> {
   let res: { status: number; body: string };
   try {
     res = await send(url, method, token, body, timeoutMs);
@@ -117,7 +135,7 @@ async function call(url: URL, method: "GET" | "POST", token: string | undefined,
     parsed = undefined;
   }
   if (res.status >= 200 && res.status < 300) {
-    if (isState(parsed)) return { ok: true, value: parsed } as const;
+    if (valid(parsed)) return { ok: true, value: parsed } as const;
     return { ok: false, status: res.status, refusal: unreachable(`The app answered HTTP ${res.status} in an unexpected shape.`, `bad-response: HTTP ${res.status}`) } as const;
   }
   if (isObject(parsed) && typeof parsed.reason === "string" && parsed.reason !== "") {
@@ -140,7 +158,7 @@ export function createApprovalClient(options: ApprovalClientOptions & { pollInte
   const interval = options.pollIntervalMs ?? POLL_INTERVAL_MS;
   const client: ApprovalClient = {
     create: (req) =>
-      call(endpoint(base, DESKTOP_ACCESS_PATH), "POST", options.token, JSON.stringify({ deskId: req.deskId, apps: req.apps, reason: req.reason }), 15_000),
+      call(endpoint(base, DESKTOP_ACCESS_PATH), "POST", options.token, JSON.stringify({ deskId: req.deskId, apps: req.apps, reason: req.reason }), 15_000, isState),
     get: (requestId, waitMs) =>
       call(
         endpoint(base, `${DESKTOP_ACCESS_PATH}/${encodeURIComponent(requestId)}`, { waitMs: String(Math.max(0, Math.round(waitMs))) }),
@@ -148,7 +166,9 @@ export function createApprovalClient(options: ApprovalClientOptions & { pollInte
         options.token,
         undefined,
         waitMs + 10_000,
+        isState,
       ),
+    release: (deskId) => call(endpoint(base, DESKTOP_RELEASE_PATH), "POST", options.token, JSON.stringify({ deskId }), 15_000, isReleaseResult),
     async waitFor(requestId, timeoutMs) {
       const deadline = Date.now() + timeoutMs;
       for (;;) {

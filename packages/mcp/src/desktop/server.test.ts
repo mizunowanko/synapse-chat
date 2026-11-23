@@ -187,6 +187,8 @@ let seenHttp: SeenHttp[];
 /** What POST answers, then what each GET answers in turn (the last one repeats). */
 let created: { status: number; body: unknown };
 let polls: DesktopAccessState[];
+/** What POST /api/desktop/release answers. */
+let released: { status: number; body: unknown };
 
 let dir: string;
 let helper: FakeHelper;
@@ -207,6 +209,7 @@ beforeEach(async () => {
   seenHttp = [];
   created = { status: 202, body: { requestId: "req-1", status: "pending" } };
   polls = [granted(["com.apple.TextEdit"])];
+  released = { status: 200, body: { released: true, message: "返しました。" } };
   receiver = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
@@ -214,7 +217,7 @@ beforeEach(async () => {
       seenHttp.push({ method: req.method ?? "", url: req.url ?? "", headers: req.headers, body: Buffer.concat(chunks).toString("utf8") });
       let status = 200;
       let body: unknown;
-      if (req.method === "POST") ({ status, body } = created);
+      if (req.method === "POST") ({ status, body } = req.url === "/api/desktop/release" ? released : created);
       else body = polls.length > 1 ? polls.shift() : polls[0];
       res.writeHead(status, { "Content-Type": "application/json" });
       res.end(JSON.stringify(body));
@@ -298,6 +301,7 @@ describe("tools/list", () => {
         "middle_click",
         "mouse_move",
         "open_application",
+        "release_access",
         "request_access",
         "right_click",
         "screenshot",
@@ -426,6 +430,44 @@ describe("request_access: the approval API decides", () => {
     const { call } = await connect();
     const r = await call("request_access", { apps: ["TextEdit"], reason: "r" });
     expect(r.structured).toEqual({ error: "この Desk には許されていない", reason: "forbidden" });
+  });
+});
+
+describe("release_access", () => {
+  it("ends the helper session, tells the app, and refuses the tools until request_access again", async () => {
+    const { call } = await connect();
+    await call("request_access", { apps: ["TextEdit"], reason: "r" });
+    expect((await call("screenshot")).isError).toBe(false);
+    const r = await call("release_access");
+    expect(r.isError).toBe(false);
+    expect(r.structured).toMatchObject({ status: "released", released: true, message: "返しました。" });
+    const post = seenHttp.find((h) => h.method === "POST" && h.url === "/api/desktop/release")!;
+    expect(JSON.parse(post.body)).toEqual({ deskId: DESK });
+    expect(post.headers.authorization).toBe(`Bearer ${TOKEN}`);
+    expect(post.headers.origin).toBeUndefined();
+    expect(ops("endSession").length).toBeGreaterThan(0);
+    expect((await call("screenshot")).structured?.reason).toBe("no-access");
+    expect((await call("list_granted_applications")).structured?.status).toBe("none");
+    expect(DESKTOP_INSTRUCTIONS).toMatch(/release_access/);
+  });
+
+  it("is fine without a grant: the app's 409 (nothing to release) is not an error, and the helper is not touched", async () => {
+    released = { status: 409, body: { error: "この Desk は許可を持っていません", reason: "no-grant" } };
+    const { call } = await connect();
+    const r = await call("release_access");
+    expect(r.isError).toBe(false);
+    expect(r.structured).toMatchObject({ status: "released", released: false });
+    expect(ops("endSession")).toHaveLength(0);
+  });
+
+  it("an app that cannot be reached is an error, but the session here is ended", async () => {
+    released = { status: 500, body: { error: "boom", reason: "internal" } };
+    const { call } = await connect();
+    await call("request_access", { apps: ["TextEdit"], reason: "r" });
+    const r = await call("release_access");
+    expect(r.isError).toBe(true);
+    expect(r.structured).toMatchObject({ reason: "internal", localReleased: true });
+    expect((await call("screenshot")).structured?.reason).toBe("no-access");
   });
 });
 
