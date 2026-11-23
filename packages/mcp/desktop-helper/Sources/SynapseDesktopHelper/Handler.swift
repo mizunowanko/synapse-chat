@@ -4,11 +4,11 @@
 //
 // | op                 | params                                             | result |
 // |--------------------|----------------------------------------------------|--------|
-// | status             | —                                                  | version, permissions (accessibility, screenRecording, inputMonitoring), escWatcher, session |
+// | status             | —                                                  | version, permissions (accessibility, screenRecording, inputMonitoring), escWatcher, multiSession, sessions, session (the latest), screen |
 // | requestPermissions | —                                                  | same as status (after prompting) |
 // | listApps           | —                                                  | {apps, frontmost} |
 // | resolveApps        | apps: [name or bundle id]                          | {apps: [{query, bundleId, name, path}]} |
-// | beginSession       | session, apps, inputApps, expiresAt? (ms epoch)    | {session} |
+// | beginSession       | session, apps, inputApps, expiresAt? (ms epoch), hold? | {session} (`locked` when another session has one of the apps) |
 // | endSession         | session                                            | {} |
 // | openApp            | session, bundleId                                  | the app, windowOnScreen (waits ≤ 2 s) |
 // | listWindows        | session                                            | {windows: [{id, pid, bundleId, app, title, x, y, width, height, onScreen, minimized, hidden, capturable, display}]} |
@@ -31,11 +31,14 @@
 // under the point is pressed or focused, AX.clickThroughAX): AppKit drops a
 // posted click on an inactive window, keys it takes. Without it they go through the HID tap as before (the
 // foreground fallback: the cursor moves, keys go to the frontmost app).
+//
+// agt-533: several sessions at once (Session.swift). Whatever works on the screen as a whole — openApp, a screenshot
+// without `window`, input without `window` — takes the screen lock first (`screen-busy` while another session has it).
 import AppKit
 import ApplicationServices
 import CoreGraphics
 
-let helperVersion = "2"
+let helperVersion = "3"
 
 final class Handler {
     let sessions: SessionManager
@@ -46,6 +49,11 @@ final class Handler {
     init(sessions: SessionManager, server: SocketServer) {
         self.sessions = sessions
         self.server = server
+    }
+
+    /// A session ended (any thread): its AX refs go, on the queue that owns them.
+    func forget(_ session: String) {
+        queue.async { AX.forget(session: session) }
     }
 
     func handle(_ conn: Connection, _ req: JSON) -> JSON {
@@ -89,6 +97,7 @@ final class Handler {
             let s = try sessions.require(r["session"] as? String)
             guard let bid = r["bundleId"] as? String else { throw HelperError("bad-request", "bundleId is required") }
             guard s.apps.contains(bid) else { throw notAllowed(bid, nil, "open") }
+            try sessions.takeScreen(s.id)
             var opened = try Apps.open(bundleId: bid)
             // The Space switch takes a moment: wait for a window before the next screenshot / click.
             if let pid = opened["pid"] as? Int {
@@ -122,6 +131,7 @@ final class Handler {
                 }
                 return try Windows.capture(w, options: o)
             }
+            try sessions.takeScreen(s.id)
             return try Capture.screenshot(apps: s.apps, options: o)
         case "cursor":
             _ = try sessions.require(r["session"] as? String)
@@ -170,15 +180,24 @@ final class Handler {
             "inputMonitoring": CGPreflightListenEventAccess(),
             "escWatcher": EscWatcher.shared.installed,
         ]
-        if let s = sessions.session {
-            o["session"] = [
+        let all = sessions.all
+        let describe = { (s: Session) -> JSON in
+            [
                 "id": s.id,
                 "apps": Array(s.apps).sorted(),
                 "inputApps": Array(s.inputApps).sorted(),
                 "expiresAt": s.expiresAt.map { Int($0.timeIntervalSince1970 * 1000) } ?? NSNull(),
-            ] as JSON
+                "hold": s.hold,
+            ]
+        }
+        o["multiSession"] = true
+        o["sessions"] = all.map(describe)
+        // Older clients read one session: the latest.
+        o["session"] = all.first.map(describe) ?? NSNull()
+        if let sc = sessions.screenHolder {
+            o["screen"] = ["holder": sc.id, "until": Int(sc.until.timeIntervalSince1970 * 1000)] as JSON
         } else {
-            o["session"] = NSNull()
+            o["screen"] = NSNull()
         }
         return o
     }
@@ -197,7 +216,8 @@ final class Handler {
         if !input.isEmpty && !EscWatcher.shared.installed {
             DispatchQueue.main.sync { _ = EscWatcher.shared.install() }
         }
-        let s = Session(id: id, owner: ObjectIdentifier(conn), apps: screen, inputApps: Set(input).intersection(screen), expiresAt: expires)
+        let hold = (r["hold"] as? Bool) ?? false
+        let s = Session(id: id, owner: ObjectIdentifier(conn), apps: screen, inputApps: hold ? [] : Set(input).intersection(screen), expiresAt: expires, hold: hold)
         try sessions.begin(s, isConnected: server.isConnected)
         return ["session": id, "escWatcher": EscWatcher.shared.installed]
     }
@@ -265,7 +285,9 @@ final class Handler {
             let w = try inputWindow(s, CGWindowID(wid))
             return (w.app, .process(pid: w.pid, window: CGWindowID(wid)))
         }
-        return (try checkFrontmost(s), .hid)
+        let app = try checkFrontmost(s)
+        try sessions.takeScreen(s.id)
+        return (app, .hid)
     }
 
     // MARK: - accessibility
@@ -369,6 +391,7 @@ final class Handler {
             app = w.app
         } else {
             app = try checkPoint(s, p)
+            try sessions.takeScreen(s.id)
         }
         switch op {
         case "click":

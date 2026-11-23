@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.15.0
+
+### Minor Changes
+
+- desktop: helper（Swift）がセッションを同時にいくつも持てるようにした（agents-familia agt-533）。1 つのアプリは 1 つのセッションだけのもので、`beginSession` はほかの生きているセッションと `apps` が重なるときだけ `locked`（`holder` と重なった `apps` 付き）。画面全体に効く操作（`openApp`、`window` の無い `screenshot`、`window` の無い HID の入力）は画面の鍵を順に取り（最後の操作から 30 秒）、ほかのセッションが持っているあいだは `screen-busy`（`holder`・`retryAfterMs`）。MCP サーバーは `screen-busy` のあいだ最長 `screenWaitMs`（既定 60 秒）待ってやり直す。AX と裏の操作は鍵を取らない。AX の ref の表はセッションごと。`beginSession` の `hold: true` は何も操作しない押さえのセッション（アプリが止めた許可のアプリを押さえる。Esc でも消えない）。Esc は押さえ以外の全部のセッションを止め、セッションごとに `aborted` を送る。`status` に `multiSession`・`sessions`・`screen` を足し、`session` はいちばん新しい 1 つ（helper の版は `3`）。`HelperStatus` / `HelperSessionInfo`（contract.ts）と instructions を合わせた。**helper の作り直し（`desktop-helper/build.sh`）と入れ直しが要る。**
+
 ## 0.14.0
 
 ### Minor Changes

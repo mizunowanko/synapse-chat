@@ -5,8 +5,8 @@
 // Refs (`e12`) name AXUIElements the helper has handed out in this session.
 // The same element gets the same ref every time it is read again (AXUIElement
 // is CFEqual across reads), so a ref from one ax_tree survives the next one;
-// an element the app has destroyed answers `stale-ref`. The table is dropped
-// when the session changes.
+// an element the app has destroyed answers `stale-ref`. Each session has its
+// own table, dropped when the session ends.
 //
 // The window element for a CGWindowID: `_AXUIElementGetWindow` (private, as
 // used by yabai / Hammerspoon / AltTab) on the app's AXWindows. On another
@@ -31,36 +31,36 @@ enum AX {
         func hash(into h: inout Hasher) { h.combine(CFHash(e)) }
     }
 
-    private static var refs: [String: AXUIElement] = [:]
-    private static var byKey: [Key: String] = [:]
-    private static var next = 1
-    private static var owner: String?
+    /// One table per session (agt-533: several sessions read and act in turn, and each keeps its refs).
+    private struct Table {
+        var refs: [String: AXUIElement] = [:]
+        var byKey: [Key: String] = [:]
+        var next = 1
+    }
+
+    private static var tables: [String: Table] = [:]
     private static var windowCache: [CGWindowID: AXUIElement] = [:]
     private static let maxRefs = 20_000
 
-    private static func use(session: String) {
-        if owner != session || refs.count > maxRefs {
-            refs = [:]
-            byKey = [:]
-            next = 1
-            owner = session
-            windowCache = [:]
-        }
+    /// The session ended: its refs go.
+    static func forget(session: String) {
+        tables[session] = nil
     }
 
     static func ref(for e: AXUIElement, session: String) -> String {
-        use(session: session)
-        if let r = byKey[Key(e: e)] { return r }
-        let r = "e\(next)"
-        next += 1
-        refs[r] = e
-        byKey[Key(e: e)] = r
+        var t = tables[session] ?? Table()
+        if t.refs.count > maxRefs { t = Table() }
+        if let r = t.byKey[Key(e: e)] { return r }
+        let r = "e\(t.next)"
+        t.next += 1
+        t.refs[r] = e
+        t.byKey[Key(e: e)] = r
+        tables[session] = t
         return r
     }
 
     static func element(_ ref: String, session: String) throws -> AXUIElement {
-        use(session: session)
-        guard let e = refs[ref] else {
+        guard let e = tables[session]?.refs[ref] else {
             throw HelperError("stale-ref", "Unknown element ref \(ref). Call ax_tree again and use a ref from it.")
         }
         return e

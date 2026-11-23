@@ -3,8 +3,8 @@
 // (default ~/Library/Application Support/synapse-desktop/helper.sock, 0600;
 // `--socket <path>` overrides it).
 //
-// The menu-bar icon is a red dot while a session holds the desktop; its menu
-// has Stop (same as Esc), the permission prompts and Quit.
+// The menu-bar icon is a red dot while any session is open; its menu has
+// Stop (same as Esc: ends every session), the permission prompts and Quit.
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -28,7 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         handler = Handler(sessions: sessions, server: server)
         server.onRequest = { [unowned self] conn, req in handler.handle(conn, req) }
         server.onDisconnect = { [unowned self] conn in sessions.released(by: ObjectIdentifier(conn)) }
-        sessions.onChange = { [weak self] _ in DispatchQueue.main.async { self?.refresh() } }
+        sessions.onChange = { [weak self] in DispatchQueue.main.async { self?.refresh() } }
+        sessions.onEnd = { [unowned self] id in handler.forget(id) }
         EscWatcher.shared.onEscape = { [weak self] in self?.abort(by: "esc") }
         do {
             try server.start()
@@ -63,24 +64,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         server?.stop()
     }
 
+    /// Esc / Stop: every session but the holds (agt-533).
     func abort(by: String) {
-        guard let id = sessions.abort() else { return }
-        server.broadcast(["event": "aborted", "session": id, "by": by])
+        for id in sessions.abort() {
+            server.broadcast(["event": "aborted", "session": id, "by": by])
+        }
     }
 
     func refresh() {
-        let s = sessions.session
+        let live = sessions.all.filter { !$0.hold }
+        let busy = !live.isEmpty
         if let button = statusItem?.button {
-            let color: NSColor = s == nil ? .secondaryLabelColor : .systemRed
-            button.attributedTitle = NSAttributedString(string: s == nil ? "○" : "●", attributes: [.foregroundColor: color])
-            button.toolTip = s == nil ? "synapse desktop: 待機中" : "synapse desktop: セッション中（Esc で停止）"
+            let color: NSColor = busy ? .systemRed : .secondaryLabelColor
+            button.attributedTitle = NSAttributedString(string: busy ? "●" : "○", attributes: [.foregroundColor: color])
+            button.toolTip = busy ? "synapse desktop: セッション中（Esc で停止）" : "synapse desktop: 待機中"
         }
-        if let s {
-            stateItem.title = "セッション中: " + s.apps.sorted().joined(separator: ", ")
+        if busy {
+            stateItem.title = "セッション中: " + live.map { $0.apps.sorted().joined(separator: ", ") }.joined(separator: " / ")
         } else {
             stateItem.title = "セッションなし"
         }
-        stopItem.isEnabled = s != nil
+        stopItem.isEnabled = busy
         let ax = AXIsProcessTrusted() ? "可" : "不可"
         let sr = CGPreflightScreenCaptureAccess() ? "可" : "不可"
         let im = CGPreflightListenEventAccess() ? "可" : "不可"
