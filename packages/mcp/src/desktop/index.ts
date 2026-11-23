@@ -23,6 +23,7 @@ export {
   type DesktopLocalReason,
   type HelperResponse,
   type HelperEvent,
+  type HelperSessionInfo,
   type HelperStatus,
   type HelperResolvedApp,
   type HelperScreenshot,
@@ -53,6 +54,7 @@ export {
   DESKTOP_INSTRUCTIONS,
   DESKTOP_TOOLS,
   DEFAULT_SCREENSHOT_MAX,
+  DEFAULT_SCREEN_WAIT_MS,
   type DesktopServerOptions,
   type DesktopServerHandle,
 } from "./server.js";

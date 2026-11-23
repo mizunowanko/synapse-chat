@@ -243,7 +243,7 @@ interface Result {
   images: { data: string; mimeType: string }[];
 }
 
-async function connect(opts: { now?: () => number; approvalTimeoutMs?: number; logFile?: string; sessionId?: string; launch?: () => Promise<void> } = {}) {
+async function connect(opts: { now?: () => number; approvalTimeoutMs?: number; logFile?: string; sessionId?: string; launch?: () => Promise<void>; screenWaitMs?: number } = {}) {
   const h = createHelperClient({ socketPath: helper.socketPath, launch: opts.launch ?? (async () => {}), connectTimeoutMs: 2000 });
   helperClients.push(h);
   const handle = createDesktopMcpServer({
@@ -254,6 +254,7 @@ async function connect(opts: { now?: () => number; approvalTimeoutMs?: number; l
     ...(opts.now ? { now: opts.now } : {}),
     ...(opts.logFile ? { logFile: opts.logFile } : {}),
     ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
+    ...(opts.screenWaitMs !== undefined ? { screenWaitMs: opts.screenWaitMs } : {}),
   });
   const [a, b] = InMemoryTransport.createLinkedPair();
   await handle.server.connect(a);
@@ -772,6 +773,23 @@ describe("the single-session lock", () => {
     expect(r.structured).toMatchObject({ reason: "locked", holder: "session-a" });
     expect((await b.call("screenshot")).structured?.reason).toBe("locked");
     expect(helper.holder).toBe("session-a");
+  });
+
+  it("agt-533: a screen operation waits its turn while another session holds the screen lock, then goes on", async () => {
+    const { call } = await connect();
+    await call("request_access", { apps: ["TextEdit"], reason: "r" });
+    helper.override.set("screenshot", { ok: false, reason: "screen-busy", error: "busy", holder: "session-x", retryAfterMs: 20 });
+    const shot = await call("screenshot", { mode: "screen" });
+    expect(shot.isError).toBe(false);
+    expect(ops("screenshot")).toHaveLength(2);
+  });
+
+  it("agt-533: gives up with screen-busy once screenWaitMs has passed", async () => {
+    const { call } = await connect({ screenWaitMs: 0 });
+    await call("request_access", { apps: ["TextEdit"], reason: "r" });
+    helper.override.set("screenshot", { ok: false, reason: "screen-busy", error: "busy", holder: "session-x", retryAfterMs: 20 });
+    expect((await call("screenshot", { mode: "screen" })).structured).toMatchObject({ reason: "screen-busy", holder: "session-x" });
+    expect(ops("screenshot")).toHaveLength(1);
   });
 
   it("begins the session again when the helper lost it (restarted)", async () => {

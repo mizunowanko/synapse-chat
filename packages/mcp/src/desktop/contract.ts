@@ -136,7 +136,29 @@ export interface HelperStatus {
   /** Input Monitoring: the Esc watcher's keyboard event tap needs it. Absent on older helpers. */
   readonly inputMonitoring?: boolean;
   readonly escWatcher: boolean;
-  readonly session: { id: string; apps: string[]; inputApps: string[]; expiresAt: number | null } | null;
+  /** The latest session (helpers before agt-533 hold only one). */
+  readonly session: HelperSessionInfo | null;
+  /** agt-533 (helper version 3): several sessions at once, one per set of apps. Absent on older helpers. */
+  readonly multiSession?: boolean;
+  /** agt-533: every open session, the latest first. Absent on older helpers. */
+  readonly sessions?: readonly HelperSessionInfo[];
+  /** agt-533: the session that holds the screen lock (screen-coordinate operations), and until when (ms epoch). */
+  readonly screen?: { holder: string; until: number } | null;
+}
+
+/**
+ * A helper session. Since agt-533 the helper holds several, as long as their `apps` do not overlap (`beginSession`
+ * answers `locked` with `holder` and the overlapping `apps` otherwise). Screen-coordinate operations (openApp, a
+ * screenshot without `window`, input without `window`) take one screen lock in turn: `screen-busy` with `holder` and
+ * `retryAfterMs` while another session has it (the MCP server waits). A `hold` session operates on nothing; it keeps
+ * its apps from the other sessions (the app uses it after stopping a grant) and Esc leaves it.
+ */
+export interface HelperSessionInfo {
+  readonly id: string;
+  readonly apps: string[];
+  readonly inputApps: string[];
+  readonly expiresAt: number | null;
+  readonly hold?: boolean;
 }
 
 export interface HelperResolvedApp {

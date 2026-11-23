@@ -41,6 +41,13 @@ export const DESKTOP_SERVER_VERSION = "2";
 /** The long edge Claude reads without downscaling; the helper fits screenshots inside it. */
 export const DEFAULT_SCREENSHOT_MAX = 1456;
 
+/** How long a screen operation waits for the helper's screen lock (agt-533). */
+export const DEFAULT_SCREEN_WAIT_MS = 60_000;
+/** How often it asks again meanwhile (at most). */
+const SCREEN_RETRY_MS = 1_000;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 export interface DesktopServerOptions {
   readonly approval: ApprovalClient;
   readonly helper: HelperClient;
@@ -53,6 +60,11 @@ export interface DesktopServerOptions {
   /** The id the helper's session lock knows this server by. Default: a random UUID. */
   readonly sessionId?: string;
   readonly screenshot?: { maxWidth?: number; maxHeight?: number; format?: "png" | "jpeg"; quality?: number };
+  /**
+   * How long a screen operation waits its turn while another session holds the helper's screen lock (`screen-busy`,
+   * agt-533). Default 60 s; then the call is refused with `screen-busy`.
+   */
+  readonly screenWaitMs?: number;
   /** For tests. */
   readonly now?: () => number;
 }
@@ -72,6 +84,7 @@ export const DESKTOP_INSTRUCTIONS =
   "ax_tree でボタンや入力欄と ref を読む → ax_press / ax_set_value / ax_perform で ref を操作する → ax_tree か screenshot で結果を確かめる。" +
   "AX で届かないときは left_click・key・type を使う。直前の screenshot がウィンドウなら、座標はその画像の画素で、イベントはそのアプリにだけ届き、ポインタは動かず前面にも出ない。" +
   "open_application と screenshot の mode: \"screen\" は人の画面を切り替える前面の操作なので、裏の操作で足りないときだけ使う。" +
+  "ほかのセッションも別のアプリを同時に操作していることがある。前面の操作（mode: \"screen\" と、その座標のクリック・キー）は全体で 1 つずつ順番に行うので、待たされることがある（待ちきれないと screen-busy。少し後でやり直す）。" +
   "ユーザーが Esc を押すと止まり、以後のツールは aborted を返す。そのときは作業をやめ、ユーザーに確かめてから request_access し直す。" +
   "操作が終わったら、期限を待たずに release_access で承認を返す（人がその Mac をまた使えるようになり、ほかのセッションも頼めるようになる）。";
 
@@ -371,6 +384,7 @@ export function createDesktopToolHandler(options: DesktopServerOptions) {
   const now = options.now ?? Date.now;
   const sessionId = options.sessionId ?? randomUUID();
   const approvalTimeoutMs = options.approvalTimeoutMs ?? DEFAULT_APPROVAL_TIMEOUT_MS;
+  const screenWaitMs = options.screenWaitMs ?? DEFAULT_SCREEN_WAIT_MS;
   const shot = {
     maxWidth: options.screenshot?.maxWidth ?? DEFAULT_SCREENSHOT_MAX,
     maxHeight: options.screenshot?.maxHeight ?? DEFAULT_SCREENSHOT_MAX,
@@ -449,13 +463,24 @@ export function createDesktopToolHandler(options: DesktopServerOptions) {
     return rest;
   }
 
-  /** A helper call within the session: begins it if needed, and once more if the helper lost it (restart). */
+  /**
+   * A helper call within the session: begins it if needed, and once more if the helper lost it (restart). While
+   * another session holds the screen lock (`screen-busy`, agt-533), waits its turn up to `screenWaitMs`.
+   */
   async function session<T>(op: string, params: Record<string, unknown>, kind: "screen" | "input", timeoutMs?: number): Promise<T> {
     let g = guard(kind);
+    const waitUntil = now() + screenWaitMs;
     for (let attempt = 0; ; attempt++) {
       if (!sessionActive) await beginSession(g);
       const r: HelperResponse<T> = await helper.request<T>(op, { ...params, session: sessionId }, timeoutMs);
       if (r.ok) return r.result;
+      if (r.reason === "screen-busy" && now() < waitUntil) {
+        const hint = typeof r.retryAfterMs === "number" && r.retryAfterMs > 0 ? r.retryAfterMs : SCREEN_RETRY_MS;
+        await sleep(Math.min(hint, SCREEN_RETRY_MS, Math.max(0, waitUntil - now())));
+        g = guard(kind);
+        attempt = -1;
+        continue;
+      }
       if (r.reason === "aborted") markAborted("helper");
       else if (r.reason === "expired") expire();
       else if (r.reason === "no-session" && attempt === 0) {
