@@ -1,5 +1,11 @@
 # @mizunowanko/synapse-chat-mcp
 
+## 0.14.0
+
+### Minor Changes
+
+- desktop: ツール `release_access` を足した（agents-familia agt-536）。操作が終わったセッションが、期限を待たずに承認を返す。サーバーは helper のセッションを終え、手元の承認と承認待ちを捨て、アプリの承認 API の新しい経路 `POST /api/desktop/release` `{ deskId }`（→ `DesktopReleaseResult` `{ released, message? }`、`contract.ts`）に知らせる。404 / 409 は「返すものが無い」として成功に扱う。`ApprovalClient` に任意の `release` を足した（無い実装では手元のセッションを終えるだけ）。instructions に「操作が終わったら release_access」を足した。helper（Swift）は変えていない。
+
 ## 0.13.0
 
 ### Minor Changes

@@ -10,12 +10,15 @@
  */
 export {
   DESKTOP_ACCESS_PATH,
+  DESKTOP_RELEASE_PATH,
   DEFAULT_HELPER_SOCKET_SUFFIX,
   HELPER_BUNDLE_ID,
   type DesktopAppRequest,
   type DesktopAccessRequest,
   type DesktopAccessStatus,
   type DesktopAccessState,
+  type DesktopReleaseRequest,
+  type DesktopReleaseResult,
   type DesktopRefusal,
   type DesktopLocalReason,
   type HelperResponse,
